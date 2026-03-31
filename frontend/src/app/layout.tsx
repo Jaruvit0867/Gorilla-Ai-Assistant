@@ -14,8 +14,8 @@ const mono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Gorilla Admin Chat",
-  description: "Admin-only chat UI for Azure AI Foundry",
+  title: "Gorilla แชตผู้ดูแล",
+  description: "หน้าแชตผู้ดูแลสำหรับ Azure AI Foundry",
 };
 
 export default function RootLayout({

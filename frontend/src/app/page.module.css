@@ -237,6 +237,76 @@
   gap: 12px;
 }
 
+.composerActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.speechGroup {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex: 1;
+}
+
+.speechButton {
+  min-width: 230px;
+  min-height: 88px;
+  padding: 16px 20px;
+  border: 0;
+  border-radius: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  cursor: pointer;
+  background: linear-gradient(135deg, #f36f45 0%, #bf3b2c 100%);
+  color: #fff7f2;
+  box-shadow: 0 20px 36px rgba(191, 59, 44, 0.26);
+  transition:
+    transform 120ms ease,
+    box-shadow 120ms ease,
+    opacity 120ms ease;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.speechButton:hover {
+  transform: translateY(-1px);
+}
+
+.speechButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+  transform: none;
+  box-shadow: none;
+}
+
+.speechButtonActive {
+  background: linear-gradient(135deg, #c41d3e 0%, #7d1329 100%);
+  box-shadow: 0 0 0 8px rgba(196, 29, 62, 0.14);
+}
+
+.speechButtonIcon {
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
+.speechButtonLabel {
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
 .errorBanner {
   background: rgba(164, 39, 63, 0.12);
   border: 1px solid rgba(164, 39, 63, 0.18);
@@ -274,7 +344,20 @@
 
   .primaryButton,
   .secondaryButton,
-  .ghostButton {
+  .ghostButton,
+  .speechButton {
     width: 100%;
+  }
+
+  .composerActions {
+    width: 100%;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .speechGroup {
+    width: 100%;
+    flex-direction: column;
+    align-items: stretch;
   }
 }

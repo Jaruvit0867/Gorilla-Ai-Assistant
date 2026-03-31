@@ -1,6 +1,14 @@
 "use client";
 
-import { FormEvent, useEffect, useEffectEvent, useMemo, useState } from "react";
+import {
+  FormEvent,
+  PointerEvent,
+  useEffect,
+  useEffectEvent,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import styles from "./page.module.css";
 
 type ChatMessage = {
@@ -32,6 +40,46 @@ type ChatResponse = {
   agentName: string;
 };
 
+type SpeechRecognitionAlternativeLike = {
+  transcript: string;
+};
+
+type SpeechRecognitionResultLike = {
+  0: SpeechRecognitionAlternativeLike;
+  isFinal: boolean;
+  length: number;
+};
+
+type SpeechRecognitionResultListLike = {
+  [index: number]: SpeechRecognitionResultLike;
+  length: number;
+};
+
+type SpeechRecognitionEventLike = {
+  resultIndex: number;
+  results: SpeechRecognitionResultListLike;
+};
+
+type SpeechRecognitionErrorEventLike = {
+  error: string;
+};
+
+type BrowserSpeechRecognition = {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  maxAlternatives: number;
+  onstart: (() => void) | null;
+  onresult: ((event: SpeechRecognitionEventLike) => void) | null;
+  onerror: ((event: SpeechRecognitionErrorEventLike) => void) | null;
+  onend: (() => void) | null;
+  start: () => void;
+  stop: () => void;
+  abort: () => void;
+};
+
+type BrowserSpeechRecognitionConstructor = new () => BrowserSpeechRecognition;
+
 const apiBaseUrl =
   process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") ??
   "http://localhost:8080";
@@ -46,10 +94,24 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [authPending, setAuthPending] = useState(true);
   const [chatPending, setChatPending] = useState(false);
+  const [speechSupported, setSpeechSupported] = useState(false);
+  const [speechActive, setSpeechActive] = useState(false);
+  const [speechStatus, setSpeechStatus] = useState("ยังไม่พร้อมใช้งาน");
+
+  const recognitionRef = useRef<BrowserSpeechRecognition | null>(null);
+  const holdActiveRef = useRef(false);
+  const manualStopRef = useRef(false);
+  const restartTimeoutRef = useRef<number | null>(null);
+  const promptRef = useRef("");
+  const speechBasePromptRef = useRef("");
 
   const canSend = useMemo(
-    () => Boolean(auth?.authenticated) && prompt.trim().length > 0 && !chatPending,
-    [auth?.authenticated, chatPending, prompt],
+    () =>
+      Boolean(auth?.authenticated) &&
+      prompt.trim().length > 0 &&
+      !chatPending &&
+      !speechActive,
+    [auth?.authenticated, chatPending, prompt, speechActive],
   );
 
   async function requestJson<T>(path: string, init?: RequestInit): Promise<T | null> {
@@ -112,6 +174,100 @@ export default function Home() {
 
   useEffect(() => {
     void refreshSession();
+  }, []);
+
+  useEffect(() => {
+    promptRef.current = prompt;
+  }, [prompt]);
+
+  useEffect(() => {
+    const SpeechRecognitionConstructor = getSpeechRecognitionConstructor();
+    if (!SpeechRecognitionConstructor) {
+      setSpeechSupported(false);
+      setSpeechStatus("เบราว์เซอร์นี้ไม่รองรับการพูดเป็นข้อความ");
+      return;
+    }
+
+    const recognition = new SpeechRecognitionConstructor();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.maxAlternatives = 1;
+    recognition.lang = "th-TH";
+
+    recognition.onstart = () => {
+      setSpeechActive(true);
+      setSpeechStatus("กำลังฟัง...");
+    };
+
+    recognition.onresult = (event) => {
+      const transcript = extractTranscript(event.results).trim();
+      if (!transcript) {
+        return;
+      }
+
+      setPrompt(mergeSpeechPrompt(speechBasePromptRef.current, transcript));
+    };
+
+    recognition.onerror = (event) => {
+      if (event.error === "no-speech") {
+        setSpeechStatus("ไม่พบเสียงพูด");
+        return;
+      }
+
+      if (event.error === "not-allowed" || event.error === "service-not-allowed") {
+        holdActiveRef.current = false;
+        setSpeechStatus("ยังไม่ได้รับสิทธิ์ไมโครโฟน");
+        setError("เบราว์เซอร์ยังไม่ได้อนุญาตให้ใช้ไมโครโฟน");
+        return;
+      }
+
+      holdActiveRef.current = false;
+      setSpeechStatus("เกิดข้อผิดพลาดในการรับเสียง");
+      setError("เริ่มรับเสียงไม่สำเร็จ ลองใหม่อีกครั้ง");
+    };
+
+    recognition.onend = () => {
+      setSpeechActive(false);
+
+      if (holdActiveRef.current && !manualStopRef.current) {
+        speechBasePromptRef.current = promptRef.current.trim();
+        restartTimeoutRef.current = window.setTimeout(() => {
+          try {
+            recognition.start();
+          } catch {
+            holdActiveRef.current = false;
+            setSpeechStatus("กดค้างเพื่อพูด");
+          }
+        }, 120);
+        return;
+      }
+
+      holdActiveRef.current = false;
+      manualStopRef.current = false;
+      setSpeechStatus("กดค้างเพื่อพูด");
+    };
+
+    recognitionRef.current = recognition;
+    setSpeechSupported(true);
+    setSpeechStatus("กดค้างเพื่อพูด");
+
+    return () => {
+      holdActiveRef.current = false;
+      manualStopRef.current = true;
+
+      if (restartTimeoutRef.current !== null) {
+        window.clearTimeout(restartTimeoutRef.current);
+        restartTimeoutRef.current = null;
+      }
+
+      try {
+        recognition.abort();
+      } catch {
+        // Ignore teardown errors from browser speech engines.
+      }
+
+      recognitionRef.current = null;
+    };
   }, []);
 
   async function handleLogin(event: FormEvent<HTMLFormElement>) {
@@ -202,18 +358,91 @@ export default function Home() {
     }
   }
 
+  function handleClearPrompt() {
+    setPrompt("");
+    promptRef.current = "";
+    speechBasePromptRef.current = "";
+    setError(null);
+    if (!speechActive && speechSupported) {
+      setSpeechStatus("กดค้างเพื่อพูด");
+    }
+  }
+
+  function handleSpeechPointerDown(event: PointerEvent<HTMLButtonElement>) {
+    event.preventDefault();
+
+    if (!speechSupported || speechActive || !auth?.authenticated || chatPending) {
+      return;
+    }
+
+    const recognition = recognitionRef.current;
+    if (!recognition) {
+      setSpeechStatus("ยังไม่พร้อมใช้งาน");
+      return;
+    }
+
+    event.currentTarget.setPointerCapture(event.pointerId);
+    holdActiveRef.current = true;
+    manualStopRef.current = false;
+    speechBasePromptRef.current = prompt.trim();
+    setError(null);
+    setSpeechStatus("กำลังเปิดไมโครโฟน...");
+
+    try {
+      recognition.start();
+    } catch {
+      holdActiveRef.current = false;
+      setSpeechStatus("ระบบรับเสียงกำลังทำงาน ลองใหม่อีกครั้ง");
+    }
+  }
+
+  function handleSpeechPointerUp(event: PointerEvent<HTMLButtonElement>) {
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    stopSpeechCapture();
+  }
+
+  function handleSpeechLostPointerCapture() {
+    stopSpeechCapture();
+  }
+
+  function stopSpeechCapture() {
+    holdActiveRef.current = false;
+    manualStopRef.current = true;
+
+    if (restartTimeoutRef.current !== null) {
+      window.clearTimeout(restartTimeoutRef.current);
+      restartTimeoutRef.current = null;
+    }
+
+    const recognition = recognitionRef.current;
+    if (!recognition) {
+      setSpeechActive(false);
+      setSpeechStatus(speechSupported ? "กดค้างเพื่อพูด" : "ยังไม่พร้อมใช้งาน");
+      return;
+    }
+
+    try {
+      recognition.stop();
+    } catch {
+      setSpeechActive(false);
+      setSpeechStatus(speechSupported ? "กดค้างเพื่อพูด" : "ยังไม่พร้อมใช้งาน");
+    }
+  }
+
   return (
     <div className={styles.page}>
       <main className={styles.shell}>
         <header className={styles.topbar}>
           <div className={styles.titleBlock}>
-            <h1>Gorilla Chat</h1>
+            <h1>Gorilla AI Assistant</h1>
             <p className={styles.subtle}>
               {auth?.authenticated
                 ? `${auth.username} • ${auth.role}`
                 : authPending
-                  ? "Checking session"
-                  : "Admin sign in"}
+                  ? "กำลังตรวจสอบเซสชัน"
+                  : "เข้าสู่ระบบผู้ดูแล"}
             </p>
           </div>
 
@@ -230,7 +459,7 @@ export default function Home() {
                   onClick={handleReset}
                   type="button"
                 >
-                  Reset
+                  ล้างแชต
                 </button>
                 <button
                   className={styles.ghostButton}
@@ -238,7 +467,7 @@ export default function Home() {
                   onClick={handleLogout}
                   type="button"
                 >
-                  Logout
+                  ออกจากระบบ
                 </button>
               </>
             ) : null}
@@ -263,7 +492,7 @@ export default function Home() {
                     key={`${message.createdAt ?? "message"}-${index}`}
                   >
                     <div className={styles.messageMeta}>
-                      <span>{message.role === "user" ? "You" : "Assistant"}</span>
+                      <span>{message.role === "user" ? "คุณ" : "ผู้ช่วย"}</span>
                       <time>{formatTimestamp(message.createdAt)}</time>
                     </div>
                     <p>{message.content}</p>
@@ -282,12 +511,39 @@ export default function Home() {
                 value={prompt}
               />
               <div className={styles.composerFooter}>
-                <span className={styles.subtle}>
-                  {chatPending ? "Generating..." : "Ready"}
-                </span>
-                <button className={styles.primaryButton} disabled={!canSend} type="submit">
-                  {chatPending ? "Sending..." : "Send"}
-                </button>
+                <div className={styles.speechGroup}>
+                  <button
+                    aria-label="Hold to speak"
+                    className={`${styles.speechButton} ${
+                      speechActive ? styles.speechButtonActive : ""
+                    }`}
+                  disabled={!speechSupported || !auth?.authenticated || chatPending}
+                  onLostPointerCapture={handleSpeechLostPointerCapture}
+                  onPointerCancel={handleSpeechLostPointerCapture}
+                  onPointerDown={handleSpeechPointerDown}
+                  onPointerUp={handleSpeechPointerUp}
+                  type="button"
+                >
+                  <span className={styles.speechButtonIcon}>●</span>
+                  <span className={styles.speechButtonLabel}>
+                      {speechActive ? "ปล่อยเพื่อหยุด" : "กดค้างเพื่อพูด"}
+                    </span>
+                  </button>
+                  <span className={styles.subtle}>{chatPending ? "กำลังสร้างคำตอบ..." : speechStatus}</span>
+                </div>
+                <div className={styles.composerActions}>
+                  <button
+                    className={styles.secondaryButton}
+                    disabled={chatPending || prompt.trim().length === 0}
+                    onClick={handleClearPrompt}
+                    type="button"
+                  >
+                    ล้างข้อความ
+                  </button>
+                  <button className={styles.primaryButton} disabled={!canSend} type="submit">
+                    {chatPending ? "กำลังส่ง..." : "ส่งข้อความ"}
+                  </button>
+                </div>
               </div>
             </form>
           </>
@@ -295,7 +551,7 @@ export default function Home() {
           <section className={styles.loginCard}>
             <form className={styles.loginForm} onSubmit={handleLogin}>
               <label className={styles.field}>
-                <span>Username</span>
+                <span>ชื่อผู้ใช้</span>
                 <input
                   autoComplete="username"
                   onChange={(event) => setUsername(event.target.value)}
@@ -304,17 +560,17 @@ export default function Home() {
                 />
               </label>
               <label className={styles.field}>
-                <span>Password</span>
+                <span>รหัสผ่าน</span>
                 <input
                   autoComplete="current-password"
                   onChange={(event) => setPassword(event.target.value)}
-                  placeholder="password"
+                  placeholder="กรอกรหัสผ่าน"
                   type="password"
                   value={password}
                 />
               </label>
               <button className={styles.primaryButton} disabled={authPending} type="submit">
-                {authPending ? "Signing In..." : "Sign In"}
+                {authPending ? "กำลังเข้าสู่ระบบ..." : "เข้าสู่ระบบ"}
               </button>
             </form>
           </section>
@@ -324,18 +580,52 @@ export default function Home() {
   );
 }
 
+function getSpeechRecognitionConstructor(): BrowserSpeechRecognitionConstructor | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const constructor = window.SpeechRecognition ?? window.webkitSpeechRecognition;
+  return constructor ?? null;
+}
+
+function extractTranscript(results: SpeechRecognitionResultListLike) {
+  let transcript = "";
+
+  for (let index = 0; index < results.length; index += 1) {
+    transcript += results[index]?.[0]?.transcript ?? "";
+  }
+
+  return transcript;
+}
+
+function mergeSpeechPrompt(basePrompt: string, transcript: string) {
+  const normalizedBase = basePrompt.trim();
+  const normalizedTranscript = transcript.trim();
+
+  if (!normalizedBase) {
+    return normalizedTranscript;
+  }
+
+  if (!normalizedTranscript) {
+    return normalizedBase;
+  }
+
+  return `${normalizedBase} ${normalizedTranscript}`;
+}
+
 function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
 }
 
 function formatTimestamp(value: string | null) {
   if (!value) {
-    return "just now";
+    return "เมื่อสักครู่";
   }
 
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
-    return "just now";
+    return "เมื่อสักครู่";
   }
 
   return new Intl.DateTimeFormat("th-TH", {
@@ -353,4 +643,11 @@ function unauthenticatedSession(): AuthSessionResponse {
     role: null,
     sessionId: null,
   };
+}
+
+declare global {
+  interface Window {
+    SpeechRecognition?: BrowserSpeechRecognitionConstructor;
+    webkitSpeechRecognition?: BrowserSpeechRecognitionConstructor;
+  }
 }
