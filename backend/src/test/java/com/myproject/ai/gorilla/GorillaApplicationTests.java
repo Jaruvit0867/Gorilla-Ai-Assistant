@@ -1,0 +1,13 @@
+package com.myproject.ai.gorilla;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.boot.test.context.SpringBootTest;
+
+@SpringBootTest
+class GorillaApplicationTests {
+
+	@Test
+	void contextLoads() {
+	}
+
+}
