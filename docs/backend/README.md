@@ -155,6 +155,13 @@ Loaded from `backend/src/main/resources/application.properties`:
 - `AZURE_EXISTING_AGENT_ID`
 - `FRONTEND_ORIGIN`
 
+Recommended local setup:
+
+```bash
+cd backend
+cp .env.example .env
+```
+
 Useful runtime settings:
 
 - `server.servlet.session.timeout`

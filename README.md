@@ -29,12 +29,14 @@ gorilla/
 ### Backend
 
 1. Go to `backend/`
-2. Fill in `.env`
-3. Login to Azure if using local development with `DefaultAzureCredential`
-4. Start the app
+2. Copy `.env.example` to `.env`
+3. Fill in `.env`
+4. Login to Azure if using local development with `DefaultAzureCredential`
+5. Start the app
 
 ```bash
 cd backend
+cp .env.example .env
 az login
 ./mvnw spring-boot:run
 ```
@@ -78,6 +80,7 @@ Notes:
 - Values should be plain strings.
 - Do not include `export`.
 - Do not wrap values in `"` unless the quote is part of the real value.
+- Safe template file: `backend/.env.example`
 
 ### Frontend
 
