@@ -40,6 +40,15 @@ class AuthAndSessionIntegrationTest {
 						}
 						"""))
 			.andExpect(status().isUnauthorized());
+
+		this.mockMvc.perform(post("/api/speech/tts")
+				.contentType(APPLICATION_JSON)
+				.content("""
+						{
+						  "text": "hello"
+						}
+						"""))
+			.andExpect(status().isUnauthorized());
 	}
 
 	@Test

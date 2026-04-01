@@ -15,10 +15,6 @@ public class AzureFoundryProperties {
 
 	private Integer maxCompletionTokens;
 
-	private Long pollIntervalMillis = 500L;
-
-	private Long pollTimeoutSeconds = 60L;
-
 	public String getProjectEndpoint() {
 		return this.projectEndpoint;
 	}
@@ -57,22 +53,6 @@ public class AzureFoundryProperties {
 
 	public void setMaxCompletionTokens(Integer maxCompletionTokens) {
 		this.maxCompletionTokens = maxCompletionTokens;
-	}
-
-	public Long getPollIntervalMillis() {
-		return this.pollIntervalMillis;
-	}
-
-	public void setPollIntervalMillis(Long pollIntervalMillis) {
-		this.pollIntervalMillis = pollIntervalMillis;
-	}
-
-	public Long getPollTimeoutSeconds() {
-		return this.pollTimeoutSeconds;
-	}
-
-	public void setPollTimeoutSeconds(Long pollTimeoutSeconds) {
-		this.pollTimeoutSeconds = pollTimeoutSeconds;
 	}
 
 }
