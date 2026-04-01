@@ -659,8 +659,8 @@
   .shell {
     min-height: 100dvh;
     height: auto;
-    padding: 14px 12px 16px;
-    gap: 16px;
+    padding: 10px 10px 12px;
+    gap: 8px;
     overflow: visible;
   }
 
@@ -668,11 +668,13 @@
   .shellChat {
     height: 100dvh;
     min-height: 100dvh;
+    padding: 8px 10px 10px;
+    gap: 6px;
     overflow: hidden;
   }
 
   .mainContent {
-    gap: 16px;
+    gap: 8px;
     min-height: 0;
     height: auto;
     overflow: visible;
@@ -681,59 +683,64 @@
   /* Chat mode keeps everything constrained */
   .mainContentChat {
     height: 100%;
+    gap: 6px;
     overflow: hidden;
   }
 
   /* --- Topbar --------------------------------------------------------- */
   .topbar {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 12px;
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
   }
 
   .brandLockup {
     align-items: center;
-    gap: 12px;
+    gap: 10px;
   }
 
   .brandLogo {
-    width: 58px;
-    border-radius: 22px;
+    width: 40px;
+    border-radius: 14px;
+    box-shadow: 0 8px 16px rgba(21, 32, 24, 0.06);
   }
 
   .brandText {
-    gap: 4px;
+    gap: 2px;
   }
 
   .brand h1 {
-    font-size: clamp(2.4rem, 11vw, 3.4rem);
-    line-height: 0.92;
+    font-size: 1.6rem;
+    line-height: 1;
   }
 
   .subtle {
-    font-size: 0.9rem;
+    font-size: 0.72rem;
+    line-height: 1.2;
   }
 
   .topbarActions {
-    justify-content: flex-start;
+    justify-content: flex-end;
     align-items: center;
     flex-direction: row;
-    flex-wrap: wrap;
-    gap: 8px;
+    flex-wrap: nowrap;
+    gap: 6px;
+    flex-shrink: 0;
   }
 
   .topbarActions .secondaryButton,
   .topbarActions .ghostButton,
-  .topbarActions .primaryButton,
+  .topbarActions .primaryButton {
+    width: auto;
+    flex: 0 0 auto;
+    padding: 8px 12px;
+    font-size: 0.78rem;
+  }
+
   .topbarActions .infoChip,
   .topbarActions .infoChipMuted {
     width: auto;
     flex: 0 0 auto;
-  }
-
-  .topbarActions .secondaryButton,
-  .topbarActions .ghostButton {
-    padding: 10px 14px;
   }
 
   .infoChip {
@@ -741,13 +748,17 @@
   }
 
   .infoChipMuted {
-    padding: 8px 12px;
-    font-size: 0.68rem;
+    padding: 6px 10px;
+    font-size: 0.64rem;
   }
 
   /* --- Panels --------------------------------------------------------- */
   .chatPanel,
-  .avatarPanel,
+  .avatarPanel {
+    padding: 10px;
+    border-radius: 20px;
+  }
+
   .loginCard,
   .loginPreview {
     padding: 18px;
@@ -756,20 +767,20 @@
 
   .panelText h2,
   .loginTitle {
-    font-size: 1.55rem;
+    font-size: 1.3rem;
   }
 
   .panelEyebrow {
-    font-size: 0.66rem;
+    font-size: 0.62rem;
   }
 
   /* --- Workspace (chat view, stacked) --------------------------------- */
   .workspace {
     grid-template-columns: 1fr;
-    grid-template-rows: minmax(200px, 24svh) minmax(0, 1fr);
+    grid-template-rows: 120px minmax(0, 1fr);
     min-height: 0;
     height: 100%;
-    gap: 12px;
+    gap: 6px;
     overflow: hidden;
   }
 
@@ -780,16 +791,29 @@
 
   .chatPanel {
     order: 2;
-    grid-template-rows: auto minmax(0, 1fr) auto;
-    gap: 12px;
+    grid-template-rows: minmax(0, 1fr) auto;
+    gap: 8px;
     min-height: 0;
+  }
+
+  /* Hide chat panel header on mobile to save space */
+  .chatPanel .panelHeader {
+    display: none;
   }
 
   .avatarPanel {
     order: 1;
-    grid-template-rows: auto minmax(0, 1fr);
-    gap: 10px;
+    gap: 0;
     min-height: 0;
+    padding: 0;
+    background: transparent;
+    border: none;
+    box-shadow: none;
+  }
+
+  /* Hide avatar panel header on mobile to save space */
+  .avatarPanel .panelHeader {
+    display: none;
   }
 
   .chatArea {
@@ -799,22 +823,23 @@
   .chatTimeline {
     height: 100%;
     padding-right: 6px;
-    gap: 12px;
+    gap: 10px;
   }
 
   .avatarStageWrap {
     min-height: 0;
     height: 100%;
+    border-radius: 20px;
   }
 
   /* --- Login layout (stacked, scrollable) ----------------------------- */
   .loginLayout {
     grid-template-columns: 1fr;
-    grid-template-rows: auto;           /* Let cards auto-size! */
+    grid-template-rows: auto;
     min-height: auto;
-    height: auto;                       /* No fixed height — content flows */
+    height: auto;
     gap: 16px;
-    overflow: visible;                  /* Let the shell scroll handle it */
+    overflow: visible;
   }
 
   .loginCard {
@@ -829,7 +854,7 @@
 
   .loginStageWrap {
     min-height: 280px;
-    height: 280px;                      /* Fixed visible height for avatar */
+    height: 280px;
   }
 
   .loginHeader {
@@ -843,83 +868,113 @@
 
   /* --- Composer ------------------------------------------------------- */
   .composerFooter {
-    flex-direction: column;
-    align-items: stretch;
+    flex-direction: row;
+    align-items: center;
+    gap: 6px;
   }
 
-  .speechButton,
-  .loginForm .primaryButton,
-  .composerActions .primaryButton,
-  .composerActions .secondaryButton {
+  .speechButton {
+    flex: 0 0 auto;
+    min-width: 0;
+    width: auto;
+    min-height: 38px;
+    padding: 0 12px;
+    border-radius: 12px;
+    box-shadow: 0 6px 14px rgba(211, 106, 55, 0.14);
+  }
+
+  .speechButtonLabel {
+    font-size: 0.72rem;
+  }
+
+  .loginForm .primaryButton {
     width: 100%;
   }
 
   .composerActions {
-    width: 100%;
-    flex-direction: column;
-    align-items: stretch;
+    flex: 1 1 auto;
+    flex-direction: row;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .composerActions .primaryButton,
+  .composerActions .secondaryButton {
+    flex: 1 1 auto;
+    width: auto;
+    padding: 8px 10px;
+    font-size: 0.76rem;
+    border-radius: 12px;
   }
 
   .composer {
-    gap: 12px;
-    padding: 14px;
-    border-radius: 24px;
+    gap: 6px;
+    padding: 8px;
+    border-radius: 16px;
   }
 
   .promptInput {
-    min-height: 72px;
-    max-height: 72px;
-    padding: 14px 16px;
-    border-radius: 18px;
+    min-height: 40px;
+    max-height: 40px;
+    padding: 8px 12px;
+    border-radius: 12px;
+    font-size: 0.88rem;
   }
 
   /* --- Messages ------------------------------------------------------- */
   .messageMeta {
-    font-size: 0.66rem;
+    font-size: 0.62rem;
   }
 
   .userMessage p,
   .gorillaMessage p {
-    padding: 13px 15px;
-    border-radius: 18px;
-    font-size: 0.95rem;
-    line-height: 1.55;
-  }
-
-  .emptyState {
-    padding: 18px;
-    font-size: 0.95rem;
-  }
-
-  .errorBanner {
-    max-width: none;
+    padding: 10px 14px;
+    border-radius: 16px;
+    font-size: 0.9rem;
+    line-height: 1.5;
   }
 
   .emptyState {
     padding: 14px 16px;
-    border-radius: 18px;
-    font-size: 0.92rem;
+    border-radius: 16px;
+    font-size: 0.88rem;
     line-height: 1.5;
+  }
+
+  .errorBanner {
+    max-width: none;
+    padding: 10px 14px;
+    border-radius: 14px;
+    font-size: 0.85rem;
   }
 }
 
 /* ========================================================================
-   SMALL MOBILE breakpoint — ≤ 560px
+   SMALL MOBILE breakpoint — ≤ 480px
    ======================================================================== */
 
-@media (max-width: 560px) {
+@media (max-width: 480px) {
   .shell {
-    padding: 12px 10px 14px;
-    gap: 12px;
+    padding: 8px 8px 10px;
+    gap: 6px;
+  }
+
+  .shellChat {
+    padding: 6px 8px 8px;
+    gap: 4px;
   }
 
   .mainContent {
-    gap: 12px;
+    gap: 6px;
+  }
+
+  .mainContentChat {
+    gap: 4px;
   }
 
   .workspace {
-    grid-template-rows: minmax(180px, 22svh) minmax(0, 1fr);
-    gap: 10px;
+    grid-template-rows: 120px minmax(0, 1fr);
+    gap: 4px;
   }
 
   .loginLayout {
@@ -931,15 +986,9 @@
     height: 240px;
   }
 
-  .chatPanel,
-  .avatarPanel,
-  .loginCard,
-  .loginPreview {
-    padding: 16px;
-    border-radius: 24px;
-  }
-
   .chatPanel {
+    padding: 8px;
+    border-radius: 16px;
     min-height: 0;
   }
 
@@ -947,10 +996,16 @@
     min-height: 0;
   }
 
+  .loginCard,
+  .loginPreview {
+    padding: 16px;
+    border-radius: 24px;
+  }
+
   .avatarStageWrap {
     min-height: 0;
     height: 100%;
-    border-radius: 22px;
+    border-radius: 16px;
   }
 
   .loginStageWrap {
@@ -958,55 +1013,77 @@
   }
 
   .brand h1 {
-    font-size: clamp(2.2rem, 11vw, 3rem);
+    font-size: 1.4rem;
   }
 
   .brandLogo {
-    width: 52px;
-    border-radius: 18px;
+    width: 36px;
+    border-radius: 12px;
   }
 
   .topbarActions {
-    gap: 6px;
+    gap: 4px;
+  }
+
+  .topbarActions .secondaryButton,
+  .topbarActions .ghostButton {
+    padding: 7px 10px;
+    font-size: 0.72rem;
   }
 
   .composer {
-    padding: 12px;
-    border-radius: 20px;
+    padding: 8px;
+    border-radius: 16px;
+    gap: 6px;
+  }
+
+  .composerFooter {
+    gap: 6px;
   }
 
   .composerActions {
-    gap: 8px;
+    gap: 4px;
+  }
+
+  .composerActions .primaryButton,
+  .composerActions .secondaryButton {
+    padding: 8px 6px;
+    font-size: 0.76rem;
   }
 
   .speechButton {
-    min-height: 48px;
-    min-width: 0;
+    min-height: 40px;
+    padding: 0 12px;
   }
 
   .speechButtonLabel {
-    font-size: 0.95rem;
+    font-size: 0.76rem;
   }
 
   .promptInput {
-    min-height: 64px;
-    max-height: 64px;
-    padding: 12px 14px;
+    min-height: 44px;
+    max-height: 44px;
+    padding: 8px 12px;
+    font-size: 0.88rem;
   }
 
   .panelText h2,
   .loginTitle {
-    font-size: 1.4rem;
+    font-size: 1.2rem;
   }
 
   .chatTimeline {
-    gap: 10px;
+    gap: 8px;
   }
 
   .userMessage p,
   .gorillaMessage p {
-    padding: 12px 14px;
-    font-size: 0.92rem;
-    line-height: 1.5;
+    padding: 8px 12px;
+    font-size: 0.85rem;
+    line-height: 1.45;
+  }
+
+  .infoChipMuted {
+    display: none;
   }
 }
