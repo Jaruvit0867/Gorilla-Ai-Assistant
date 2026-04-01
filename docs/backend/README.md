@@ -8,6 +8,7 @@
 - Spring Security
 - Azure Identity
 - Azure AI Foundry via REST
+- Azure Speech REST TTS
 
 ## Main Responsibilities
 
@@ -15,15 +16,18 @@
 - protect `/api/**` endpoints with `ROLE_ADMIN`
 - keep chat history in `HttpSession`
 - send prompts to Azure AI Foundry
+- synthesize assistant replies to audio with Azure Speech
 
 ## Key Files
 
-- `backend/src/main/java/com/myproject/ai/gorilla/GorillaApplication.java`
-- `backend/src/main/java/com/myproject/ai/gorilla/config/SecurityConfiguration.java`
-- `backend/src/main/java/com/myproject/ai/gorilla/controller/AuthController.java`
-- `backend/src/main/java/com/myproject/ai/gorilla/controller/AiChatController.java`
-- `backend/src/main/java/com/myproject/ai/gorilla/service/AzureFoundryChatService.java`
-- `backend/src/main/resources/application.properties`
+- [GorillaApplication.java](/Users/nn0t/repo/gorilla/backend/src/main/java/com/myproject/ai/gorilla/GorillaApplication.java)
+- [SecurityConfiguration.java](/Users/nn0t/repo/gorilla/backend/src/main/java/com/myproject/ai/gorilla/config/SecurityConfiguration.java)
+- [AuthController.java](/Users/nn0t/repo/gorilla/backend/src/main/java/com/myproject/ai/gorilla/controller/AuthController.java)
+- [AiChatController.java](/Users/nn0t/repo/gorilla/backend/src/main/java/com/myproject/ai/gorilla/controller/AiChatController.java)
+- [SpeechController.java](/Users/nn0t/repo/gorilla/backend/src/main/java/com/myproject/ai/gorilla/controller/SpeechController.java)
+- [AzureFoundryChatService.java](/Users/nn0t/repo/gorilla/backend/src/main/java/com/myproject/ai/gorilla/service/AzureFoundryChatService.java)
+- [AzureSpeechTtsService.java](/Users/nn0t/repo/gorilla/backend/src/main/java/com/myproject/ai/gorilla/service/AzureSpeechTtsService.java)
+- [application.properties](/Users/nn0t/repo/gorilla/backend/src/main/resources/application.properties)
 
 ## Request Flow
 
@@ -46,60 +50,63 @@
 7. Service stores user and assistant messages back into `HttpSession`
 8. Updated history is returned to the client
 
+### TTS flow
+
+1. Client calls `POST /api/speech/tts`
+2. `SpeechController.synthesize(...)` validates the request body
+3. `AzureSpeechTtsService.synthesize(...)` builds SSML
+4. Service calls Azure Speech REST TTS
+5. Audio bytes are returned as `audio/mpeg`
+
 ## Important Classes And Methods
 
 ### `SecurityConfiguration`
 
 Purpose:
 
-- defines authentication, authorization, CORS, session behavior, and in-memory admin user
+- defines authentication, authorization, CORS, and session behavior
 
 Important methods:
 
 - `securityFilterChain(...)`
-  - disables form login and basic auth
-  - allows `/api/auth/login`, `/api/auth/me`
-  - requires authenticated admin for `/api/**`
 - `securityContextRepository()`
-  - uses `HttpSessionSecurityContextRepository`
 - `userDetailsService(...)`
-  - creates the in-memory admin user from `ADMIN_USERNAME` and `ADMIN_PASSWORD`
 - `authenticationManager(...)`
-  - authenticates login requests against the in-memory user
 - `corsConfigurationSource(...)`
-  - allows frontend origin from configuration
 
 ### `AuthController`
 
 Purpose:
 
-- session login/logout/status endpoints
+- session login, logout, and status endpoints
 
 Important methods:
 
 - `login(...)`
-  - validates request body
-  - authenticates admin credentials
-  - saves Spring Security context into session
 - `me(...)`
-  - returns current auth state for the existing session
 - `logout(...)`
-  - clears the current session auth context
 
 ### `AiChatController`
 
 Purpose:
 
-- main chat and history endpoints
+- chat and history endpoints
 
 Important methods:
 
 - `chat(...)`
-  - sends prompt to service and returns answer plus updated history
 - `history(...)`
-  - returns current `HttpSession` history
 - `clearHistory(...)`
-  - clears chat history for the session
+
+### `SpeechController`
+
+Purpose:
+
+- speech output endpoint
+
+Important methods:
+
+- `synthesize(...)`
 
 ### `AzureFoundryChatService`
 
@@ -110,75 +117,57 @@ Purpose:
 Important methods:
 
 - `generateAnswer(...)`
-  - validates prompt
-  - resolves Azure config
-  - loads history from session
-  - builds Foundry request body
-  - calls Azure
-  - stores updated history
 - `getHistory(...)`
-  - returns current history snapshot
 - `clearHistory(...)`
-  - removes the history session attribute
 - `parseAgentReference(...)`
-  - supports `agent-name` or `agent-name:version`
 - `buildResponseRequest(...)`
-  - creates the payload sent to Azure
 - `buildInputMessages(...)`
-  - maps session messages into Foundry input format
 - `acquireAccessToken()`
-  - gets a token from `DefaultAzureCredential`
 - `extractAnswer(...)`
-  - reads `output_text` or `output[].content[].text`
+
+### `AzureSpeechTtsService`
+
+Purpose:
+
+- synthesizes assistant text into audio with Azure Speech
+
+Important methods:
+
+- `synthesize(...)`
+- `resolveSynthesisUrl(...)`
+- `buildSsml(...)`
+- `resolveVoiceLocale(...)`
+- `normalizeConfigValue(...)`
 
 ## Session Model
 
-- Auth session is stored by Spring Security in `HttpSession`
-- Chat history is stored under the internal attribute `CHAT_HISTORY`
+- auth state is stored by Spring Security in `HttpSession`
+- chat history is stored under the `CHAT_HISTORY` session attribute
 - `sessionId` in JSON responses is for diagnostics only
-- The real auth mechanism is the `JSESSIONID` cookie
-
-## Current Security Model
-
-- only one role exists right now: `ADMIN`
-- credentials are loaded from environment variables
-- CSRF is currently disabled
-- CORS allows one configured frontend origin
+- the real auth mechanism is the `JSESSIONID` cookie
 
 ## Required Configuration
-
-Loaded from `backend/src/main/resources/application.properties`:
 
 - `ADMIN_USERNAME`
 - `ADMIN_PASSWORD`
 - `AZURE_EXISTING_AIPROJECT_ENDPOINT`
 - `AZURE_EXISTING_AGENT_ID`
+- `AZURE_LOCATION`
+- `AZURE_SPEECH_ENDPOINT`
+- `AZURE_SPEECH_KEY`
+- `AZURE_SPEECH_VOICE_NAME`
 - `FRONTEND_ORIGIN`
 
-Recommended local setup:
-
-```bash
-cd backend
-cp .env.example .env
-```
-
-Useful runtime settings:
-
-- `server.servlet.session.timeout`
-- `server.servlet.session.cookie.http-only`
-- `server.servlet.session.cookie.same-site`
-
 ## Testing
-
-Run:
 
 ```bash
 cd backend
 ./mvnw test
 ```
 
-Important tests:
+Current tests cover:
 
-- context boot test
-- auth and session integration test
-- AzureFoundryChatService unit tests
+- application boot
+- auth and session integration
+- Azure AI Foundry service logic
+- Azure Speech TTS helper logic

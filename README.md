@@ -1,12 +1,12 @@
 # Gorilla
 
-Full-stack chat application with:
+Gorilla is a full-stack cafe menu assistant with:
 
 - `backend/`: Spring Boot 4 REST API
 - `frontend/`: Next.js 16 web client
-- Azure AI Foundry integration
-- Spring Security session-based admin auth
-- `HttpSession` chat history
+- Azure AI Foundry for chat responses
+- Azure Speech TTS for assistant voice playback
+- session-based admin authentication and chat history
 
 ## Project Structure
 
@@ -15,9 +15,10 @@ gorilla/
 ├── backend/
 │   ├── src/
 │   ├── Dockerfile
-│   └── .env
+│   └── .env.example
 ├── frontend/
 │   ├── src/
+│   ├── assets/models/
 │   └── .env.local.example
 └── docs/
     ├── backend/
@@ -27,12 +28,6 @@ gorilla/
 ## Quick Start
 
 ### Backend
-
-1. Go to `backend/`
-2. Copy `.env.example` to `.env`
-3. Fill in `.env`
-4. Login to Azure if using local development with `DefaultAzureCredential`
-5. Start the app
 
 ```bash
 cd backend
@@ -48,10 +43,6 @@ http://localhost:8080
 ```
 
 ### Frontend
-
-1. Go to `frontend/`
-2. Create `.env.local` if needed
-3. Start Next.js
 
 ```bash
 cd frontend
@@ -73,14 +64,18 @@ http://localhost:3000
 - `ADMIN_PASSWORD`
 - `AZURE_EXISTING_AIPROJECT_ENDPOINT`
 - `AZURE_EXISTING_AGENT_ID`
+- `AZURE_LOCATION`
+- `AZURE_SPEECH_ENDPOINT`
+- `AZURE_SPEECH_KEY`
+- `AZURE_SPEECH_VOICE_NAME`
 - `FRONTEND_ORIGIN`
 
 Notes:
 
-- Values should be plain strings.
-- Do not include `export`.
-- Do not wrap values in `"` unless the quote is part of the real value.
-- Safe template file: `backend/.env.example`
+- values should be plain strings
+- do not include `export`
+- do not wrap values in quotes unless the quote is part of the real value
+- use [backend/.env.example](/Users/nn0t/repo/gorilla/backend/.env.example) as the starting point
 
 ### Frontend
 
@@ -92,19 +87,14 @@ Example:
 NEXT_PUBLIC_API_BASE_URL=http://localhost:8080
 ```
 
-## Authentication Model
+## Current Features
 
-This project currently uses session-based authentication.
-
-- `POST /api/auth/login` authenticates the admin user
-- Spring returns a `JSESSIONID` cookie
-- The browser sends that cookie automatically on later requests
-- Protected APIs under `/api/**` require the session
-
-Important:
-
-- The `sessionId` in JSON responses is not a bearer token.
-- Real authentication is based on the `JSESSIONID` cookie.
+- admin login with Spring Security session auth
+- session-based chat history with `HttpSession`
+- Azure AI Foundry agent chat
+- browser-native speech input in Thai
+- Azure Speech TTS playback for assistant replies
+- Gorilla avatar panel beside the chat UI
 
 ## Backend API Summary
 
@@ -120,9 +110,13 @@ Chat:
 - `GET /api/ai/history`
 - `DELETE /api/ai/history`
 
+Speech:
+
+- `POST /api/speech/tts`
+
 ## Docker
 
-The backend includes a multi-stage Docker build in [backend/Dockerfile](backend/Dockerfile).
+The backend includes a Docker build in [backend/Dockerfile](/Users/nn0t/repo/gorilla/backend/Dockerfile).
 
 Build an AMD64 image for Azure App Service:
 
@@ -133,32 +127,8 @@ docker buildx build --platform linux/amd64 --load \
   -t nn0t6370/gorilla-backend:0.0.1 .
 ```
 
-Push to Docker Hub:
-
-```bash
-docker login
-docker push nn0t6370/gorilla-backend:latest
-docker push nn0t6370/gorilla-backend:0.0.1
-```
-
-## Azure Deployment Notes
-
-For Azure Web App custom container, add at least:
-
-- `WEBSITES_PORT=8080`
-- `ADMIN_USERNAME`
-- `ADMIN_PASSWORD`
-- `AZURE_EXISTING_AIPROJECT_ENDPOINT`
-- `AZURE_EXISTING_AGENT_ID`
-- `FRONTEND_ORIGIN`
-
-If backend uses `DefaultAzureCredential` in Azure:
-
-- enable managed identity on the Web App
-- assign the required Azure AI Foundry role to that identity
-
 ## Documentation
 
-- Backend docs: [docs/backend/README.md](docs/backend/README.md)
-- Backend API docs: [docs/backend/api.md](docs/backend/api.md)
-- Frontend docs: [docs/frontend/README.md](docs/frontend/README.md)
+- backend overview: [docs/backend/README.md](/Users/nn0t/repo/gorilla/docs/backend/README.md)
+- backend API: [docs/backend/api.md](/Users/nn0t/repo/gorilla/docs/backend/api.md)
+- frontend overview: [docs/frontend/README.md](/Users/nn0t/repo/gorilla/docs/frontend/README.md)

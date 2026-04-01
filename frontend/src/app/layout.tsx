@@ -14,8 +14,8 @@ const mono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Gorilla แชตผู้ดูแล",
-  description: "หน้าแชตผู้ดูแลสำหรับ Azure AI Foundry",
+  title: "Gorilla",
+  description: "ผู้ช่วยแชตเมนูร้าน Gorilla",
 };
 
 export default function RootLayout({

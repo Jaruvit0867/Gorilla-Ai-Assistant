@@ -6,87 +6,78 @@
 - React 19
 - TypeScript
 - CSS Modules
+- Three.js via `@react-three/fiber`
 
 ## Main Responsibilities
 
-- show login form for admin auth
-- keep UI state for current page
-- reuse backend session cookie automatically
-- display chat history returned by backend
-- send prompts to backend
+- show the admin login page
+- render chat history returned by the backend
+- send prompts to the backend
+- capture browser speech input in Thai
+- play assistant replies through Azure Speech TTS audio
+- render the Gorilla avatar beside the chat
 
 ## Key Files
 
-- `frontend/src/app/page.tsx`
-- `frontend/src/app/page.module.css`
-- `frontend/src/app/layout.tsx`
-- `frontend/src/app/globals.css`
-- `frontend/.env.local.example`
+- [page.tsx](/Users/nn0t/repo/gorilla/frontend/src/app/page.tsx)
+- [page.module.css](/Users/nn0t/repo/gorilla/frontend/src/app/page.module.css)
+- [layout.tsx](/Users/nn0t/repo/gorilla/frontend/src/app/layout.tsx)
+- [globals.css](/Users/nn0t/repo/gorilla/frontend/src/app/globals.css)
+- [gorilla-avatar-stage.tsx](/Users/nn0t/repo/gorilla/frontend/src/components/gorilla-avatar-stage.tsx)
 
 ## Integration Model
 
-The frontend does not manage tokens manually.
-
-- it calls backend endpoints with `fetch`
-- requests use `credentials: "include"`
-- browser stores and reuses `JSESSIONID`
-- backend owns authentication and chat history
+- the frontend calls backend endpoints with `fetch`
+- every request uses `credentials: "include"`
+- the browser stores and reuses `JSESSIONID`
+- the backend owns authentication and chat history
 
 ## Page Flow
 
 1. page loads
 2. frontend calls `/api/auth/me`
 3. if authenticated, frontend calls `/api/ai/history`
-4. user can send messages with `/api/ai/chat`
-5. user can clear history with `DELETE /api/ai/history`
-6. user can logout with `POST /api/auth/logout`
+4. user can type and send messages with `/api/ai/chat`
+5. user can use browser speech input to fill the prompt field
+6. assistant replies are spoken with `/api/speech/tts`
+7. user can clear history with `DELETE /api/ai/history`
+8. user can logout with `POST /api/auth/logout`
 
 ## Important Functions In `page.tsx`
 
 ### `requestJson(...)`
 
-Purpose:
-
-- shared wrapper for all HTTP requests
+- shared wrapper for JSON API requests
 - sends `credentials: "include"`
-- parses JSON
-- throws readable errors when request fails
+- throws readable errors when the request fails
+
+### `requestAudio(...)`
+
+- calls the TTS endpoint
+- returns audio as a `Blob`
 
 ### `refreshSession`
 
-Purpose:
+- checks whether the current browser session is authenticated
+- loads chat history when a session already exists
 
-- called on first render
-- checks whether user is already authenticated
-- loads chat history when session exists
+### `submitPrompt(...)`
 
-### `handleLogin(...)`
+- sends the prompt to `/api/ai/chat`
+- updates the visible history from the backend response
+- triggers audio playback for the assistant reply
 
-Purpose:
+### `startSpeechCapture()` and `stopSpeechCapture()`
 
-- sends admin credentials to `/api/auth/login`
-- refreshes history after login succeeds
+- use browser speech recognition
+- fill the textarea with recognized Thai speech
+- stop automatically after 5 seconds with no new input
 
-### `handleLogout()`
+### `speakAssistantAnswer(...)`
 
-Purpose:
-
-- logs out current session
-- clears local UI state
-
-### `handleReset()`
-
-Purpose:
-
-- clears backend chat history for the current session
-- clears the visible chat area
-
-### `handleSend(...)`
-
-Purpose:
-
-- sends the current prompt to `/api/ai/chat`
-- updates message list from the returned `history`
+- requests MP3 audio from `/api/speech/tts`
+- plays the audio in the browser
+- keeps the avatar in speaking mode while audio is playing
 
 ## State Stored In The Frontend
 
@@ -101,17 +92,18 @@ Main state values:
 - `error`
 - `authPending`
 - `chatPending`
+- `speechSupported`
+- `speechActive`
+- `avatarSpeaking`
 
 Important note:
 
 - chat history source of truth is the backend session
-- frontend only renders the returned history
+- the frontend only renders the history returned by the backend
 
 ## Environment Variables
 
 Use `.env.local` when needed.
-
-Available public variable:
 
 - `NEXT_PUBLIC_API_BASE_URL`
 
@@ -123,33 +115,10 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8080
 
 ## Commands
 
-Install dependencies:
-
 ```bash
 cd frontend
 npm install
-```
-
-Start dev server:
-
-```bash
 npm run dev
-```
-
-Build production bundle:
-
-```bash
 npm run build
-```
-
-Lint:
-
-```bash
 npm run lint
 ```
-
-## Notes For Future Work
-
-- if backend moves to CSRF protection, this page will need to send the CSRF token
-- if backend changes from session auth to JWT, request handling will need to change
-- if chat becomes multi-page or multi-feature, `page.tsx` should be split into smaller components

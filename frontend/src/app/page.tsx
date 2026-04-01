@@ -1,15 +1,26 @@
 "use client";
 
+import dynamic from "next/dynamic";
+import Image from "next/image";
 import {
   FormEvent,
-  PointerEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
   useEffect,
   useEffectEvent,
   useMemo,
   useRef,
   useState,
 } from "react";
+import bannerImage from "../../assets/pictures/banner.jpg";
+import logoImage from "../../assets/pictures/logo.png";
+import type { AvatarMode } from "../components/gorilla-avatar-stage";
 import styles from "./page.module.css";
+
+const GorillaAvatarStage = dynamic(() => import("../components/gorilla-avatar-stage"), {
+  ssr: false,
+  loading: () => <div className={styles.avatarFallback} />,
+});
 
 type ChatMessage = {
   role: "user" | "assistant";
@@ -56,7 +67,6 @@ type SpeechRecognitionResultListLike = {
 };
 
 type SpeechRecognitionEventLike = {
-  resultIndex: number;
   results: SpeechRecognitionResultListLike;
 };
 
@@ -81,8 +91,10 @@ type BrowserSpeechRecognition = {
 type BrowserSpeechRecognitionConstructor = new () => BrowserSpeechRecognition;
 
 const apiBaseUrl =
-  process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") ??
-  "http://localhost:8080";
+  process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") ?? "http://localhost:8080";
+
+const SPEECH_IDLE_AUTO_STOP_MS = 5_000;
+const SPEECH_HOLD_START_DELAY_MS = 180;
 
 export default function Home() {
   const [auth, setAuth] = useState<AuthSessionResponse | null>(null);
@@ -96,14 +108,20 @@ export default function Home() {
   const [chatPending, setChatPending] = useState(false);
   const [speechSupported, setSpeechSupported] = useState(false);
   const [speechActive, setSpeechActive] = useState(false);
-  const [speechStatus, setSpeechStatus] = useState("ยังไม่พร้อมใช้งาน");
+  const [avatarSpeaking, setAvatarSpeaking] = useState(false);
 
   const recognitionRef = useRef<BrowserSpeechRecognition | null>(null);
-  const holdActiveRef = useRef(false);
-  const manualStopRef = useRef(false);
-  const restartTimeoutRef = useRef<number | null>(null);
   const promptRef = useRef("");
   const speechBasePromptRef = useRef("");
+  const speechHoldStartTimeoutRef = useRef<number | null>(null);
+  const speechHoldTriggeredRef = useRef(false);
+  const speechIdleTimeoutRef = useRef<number | null>(null);
+  const speechHeardInputRef = useRef(false);
+  const speechKeyHoldRef = useRef(false);
+  const assistantSpeakTimeoutRef = useRef<number | null>(null);
+  const assistantAudioRef = useRef<HTMLAudioElement | null>(null);
+  const assistantAudioUrlRef = useRef<string | null>(null);
+  const assistantSpeechAbortRef = useRef<AbortController | null>(null);
 
   const canSend = useMemo(
     () =>
@@ -113,6 +131,30 @@ export default function Home() {
       !speechActive,
     [auth?.authenticated, chatPending, prompt, speechActive],
   );
+
+  const avatarMode = useMemo<AvatarMode>(() => {
+    if (speechActive) {
+      return "listening";
+    }
+
+    if (chatPending) {
+      return "thinking";
+    }
+
+    if (avatarSpeaking) {
+      return "speaking";
+    }
+
+    return "idle";
+  }, [avatarSpeaking, chatPending, speechActive]);
+
+  const speechButtonLabel = useMemo(() => {
+    if (!speechSupported) {
+      return "ไม่รองรับการพูด";
+    }
+
+    return speechActive ? "ปล่อยเพื่อหยุด" : "กดค้างเพื่อพูด";
+  }, [speechActive, speechSupported]);
 
   async function requestJson<T>(path: string, init?: RequestInit): Promise<T | null> {
     const response = await fetch(`${apiBaseUrl}${path}`, {
@@ -143,6 +185,39 @@ export default function Home() {
     }
 
     return payload as T;
+  }
+
+  async function requestAudio(path: string, init?: RequestInit): Promise<Blob> {
+    const response = await fetch(`${apiBaseUrl}${path}`, {
+      ...init,
+      credentials: "include",
+      headers: {
+        ...(init?.headers ?? {}),
+      },
+    });
+
+    if (!response.ok) {
+      const rawError = await response.text().catch(() => "");
+      let reason = `Request failed with status ${response.status}`;
+
+      if (rawError) {
+        try {
+          const payload = JSON.parse(rawError) as Record<string, unknown>;
+          reason =
+            typeof payload.message === "string"
+              ? payload.message
+              : typeof payload.error === "string"
+                ? payload.error
+                : rawError;
+        } catch {
+          reason = rawError;
+        }
+      }
+
+      throw new Error(reason);
+    }
+
+    return response.blob();
   }
 
   const refreshSession = useEffectEvent(async () => {
@@ -180,11 +255,11 @@ export default function Home() {
     promptRef.current = prompt;
   }, [prompt]);
 
+  /* eslint-disable react-hooks/exhaustive-deps */
   useEffect(() => {
     const SpeechRecognitionConstructor = getSpeechRecognitionConstructor();
     if (!SpeechRecognitionConstructor) {
       setSpeechSupported(false);
-      setSpeechStatus("เบราว์เซอร์นี้ไม่รองรับการพูดเป็นข้อความ");
       return;
     }
 
@@ -195,8 +270,9 @@ export default function Home() {
     recognition.lang = "th-TH";
 
     recognition.onstart = () => {
+      speechHeardInputRef.current = false;
       setSpeechActive(true);
-      setSpeechStatus("กำลังฟัง...");
+      scheduleSpeechIdleTimeout();
     };
 
     recognition.onresult = (event) => {
@@ -205,60 +281,36 @@ export default function Home() {
         return;
       }
 
+      speechHeardInputRef.current = true;
       setPrompt(mergeSpeechPrompt(speechBasePromptRef.current, transcript));
+      scheduleSpeechIdleTimeout();
     };
 
     recognition.onerror = (event) => {
+      clearSpeechIdleTimeout();
+
       if (event.error === "no-speech") {
-        setSpeechStatus("ไม่พบเสียงพูด");
         return;
       }
 
       if (event.error === "not-allowed" || event.error === "service-not-allowed") {
-        holdActiveRef.current = false;
-        setSpeechStatus("ยังไม่ได้รับสิทธิ์ไมโครโฟน");
         setError("เบราว์เซอร์ยังไม่ได้อนุญาตให้ใช้ไมโครโฟน");
         return;
       }
 
-      holdActiveRef.current = false;
-      setSpeechStatus("เกิดข้อผิดพลาดในการรับเสียง");
       setError("เริ่มรับเสียงไม่สำเร็จ ลองใหม่อีกครั้ง");
     };
 
     recognition.onend = () => {
+      clearSpeechIdleTimeout();
       setSpeechActive(false);
-
-      if (holdActiveRef.current && !manualStopRef.current) {
-        speechBasePromptRef.current = promptRef.current.trim();
-        restartTimeoutRef.current = window.setTimeout(() => {
-          try {
-            recognition.start();
-          } catch {
-            holdActiveRef.current = false;
-            setSpeechStatus("กดค้างเพื่อพูด");
-          }
-        }, 120);
-        return;
-      }
-
-      holdActiveRef.current = false;
-      manualStopRef.current = false;
-      setSpeechStatus("กดค้างเพื่อพูด");
     };
 
     recognitionRef.current = recognition;
     setSpeechSupported(true);
-    setSpeechStatus("กดค้างเพื่อพูด");
 
     return () => {
-      holdActiveRef.current = false;
-      manualStopRef.current = true;
-
-      if (restartTimeoutRef.current !== null) {
-        window.clearTimeout(restartTimeoutRef.current);
-        restartTimeoutRef.current = null;
-      }
+      clearSpeechIdleTimeout();
 
       try {
         recognition.abort();
@@ -269,6 +321,147 @@ export default function Home() {
       recognitionRef.current = null;
     };
   }, []);
+  /* eslint-enable react-hooks/exhaustive-deps */
+
+  /* eslint-disable react-hooks/exhaustive-deps */
+  useEffect(() => {
+    return () => {
+      if (assistantSpeakTimeoutRef.current !== null) {
+        window.clearTimeout(assistantSpeakTimeoutRef.current);
+      }
+
+      clearSpeechHoldStartTimeout();
+      clearSpeechIdleTimeout();
+      stopSpeechCapture();
+    };
+  }, []);
+  /* eslint-enable react-hooks/exhaustive-deps */
+
+  function clearSpeechHoldStartTimeout() {
+    if (speechHoldStartTimeoutRef.current !== null) {
+      window.clearTimeout(speechHoldStartTimeoutRef.current);
+      speechHoldStartTimeoutRef.current = null;
+    }
+  }
+
+  function clearSpeechIdleTimeout() {
+    if (speechIdleTimeoutRef.current !== null) {
+      window.clearTimeout(speechIdleTimeoutRef.current);
+      speechIdleTimeoutRef.current = null;
+    }
+  }
+
+  function scheduleSpeechIdleTimeout() {
+    clearSpeechIdleTimeout();
+    speechIdleTimeoutRef.current = window.setTimeout(() => {
+      stopSpeechCapture();
+    }, SPEECH_IDLE_AUTO_STOP_MS);
+  }
+
+  function stopAssistantSpeaking() {
+    assistantSpeechAbortRef.current?.abort();
+    assistantSpeechAbortRef.current = null;
+
+    const currentAudio = assistantAudioRef.current;
+    if (currentAudio) {
+      currentAudio.onplay = null;
+      currentAudio.onended = null;
+      currentAudio.onerror = null;
+      currentAudio.onpause = null;
+      currentAudio.pause();
+      currentAudio.src = "";
+      assistantAudioRef.current = null;
+    }
+
+    if (assistantAudioUrlRef.current) {
+      URL.revokeObjectURL(assistantAudioUrlRef.current);
+      assistantAudioUrlRef.current = null;
+    }
+
+    if (assistantSpeakTimeoutRef.current !== null) {
+      window.clearTimeout(assistantSpeakTimeoutRef.current);
+      assistantSpeakTimeoutRef.current = null;
+    }
+
+    setAvatarSpeaking(false);
+  }
+
+  function startAssistantTextAnimation(text: string) {
+    stopAssistantSpeaking();
+
+    const speakingDuration = Math.min(9000, Math.max(3200, text.trim().length * 42));
+    setAvatarSpeaking(true);
+    assistantSpeakTimeoutRef.current = window.setTimeout(() => {
+      assistantSpeakTimeoutRef.current = null;
+      setAvatarSpeaking(false);
+    }, speakingDuration);
+  }
+
+  async function speakAssistantAnswer(text: string) {
+    stopAssistantSpeaking();
+
+    const normalizedText = text.trim();
+    if (!normalizedText) {
+      return;
+    }
+
+    const abortController = new AbortController();
+    assistantSpeechAbortRef.current = abortController;
+
+    try {
+      const audioBlob = await requestAudio("/api/speech/tts", {
+        method: "POST",
+        body: JSON.stringify({ text: normalizedText }),
+        headers: {
+          "Content-Type": "application/json",
+        },
+        signal: abortController.signal,
+      });
+
+      if (abortController.signal.aborted || audioBlob.size === 0) {
+        return;
+      }
+
+      const audioUrl = URL.createObjectURL(audioBlob);
+      const audio = new Audio(audioUrl);
+
+      assistantAudioUrlRef.current = audioUrl;
+      assistantAudioRef.current = audio;
+
+      const cleanup = () => {
+        if (assistantAudioRef.current === audio) {
+          assistantAudioRef.current = null;
+        }
+
+        if (assistantAudioUrlRef.current === audioUrl) {
+          URL.revokeObjectURL(audioUrl);
+          assistantAudioUrlRef.current = null;
+        }
+
+        if (assistantSpeechAbortRef.current === abortController) {
+          assistantSpeechAbortRef.current = null;
+        }
+
+        setAvatarSpeaking(false);
+      };
+
+      audio.preload = "auto";
+      audio.onplay = () => setAvatarSpeaking(true);
+      audio.onended = cleanup;
+      audio.onerror = cleanup;
+      audio.onpause = () => {
+        if (!audio.ended) {
+          cleanup();
+        }
+      };
+
+      await audio.play();
+    } catch (requestError) {
+      if (!abortController.signal.aborted) {
+        throw requestError;
+      }
+    }
+  }
 
   async function handleLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -300,6 +493,8 @@ export default function Home() {
     setError(null);
 
     try {
+      stopSpeechCapture();
+      stopAssistantSpeaking();
       await requestJson("/api/auth/logout", { method: "POST" });
       setAuth(unauthenticatedSession());
       setMessages([]);
@@ -317,13 +512,53 @@ export default function Home() {
     setError(null);
 
     try {
+      stopSpeechCapture();
+      stopAssistantSpeaking();
       const history = await requestJson<ChatHistoryResponse>("/api/ai/history", {
         method: "DELETE",
       });
       setMessages(history?.messages ?? []);
       setLatestMeta(null);
+      setPrompt("");
     } catch (requestError) {
       setError(getErrorMessage(requestError, "ล้างประวัติแชตไม่สำเร็จ"));
+    } finally {
+      setChatPending(false);
+    }
+  }
+
+  async function submitPrompt(nextPrompt: string) {
+    const normalizedPrompt = nextPrompt.trim();
+    if (!auth?.authenticated || normalizedPrompt.length === 0 || chatPending) {
+      return;
+    }
+
+    setChatPending(true);
+    setError(null);
+    stopAssistantSpeaking();
+
+    try {
+      const response = await requestJson<ChatResponse>("/api/ai/chat", {
+        method: "POST",
+        body: JSON.stringify({
+          prompt: normalizedPrompt,
+        }),
+      });
+
+      if (response) {
+        setMessages(response.history);
+        setLatestMeta(response);
+        void speakAssistantAnswer(response.answer).catch((ttsError) => {
+          console.error("Azure Speech TTS playback failed", ttsError);
+          startAssistantTextAnimation(response.answer);
+        });
+      }
+
+      setPrompt("");
+      promptRef.current = "";
+      speechBasePromptRef.current = "";
+    } catch (requestError) {
+      setError(getErrorMessage(requestError, "ส่งข้อความไม่สำเร็จ"));
     } finally {
       setChatPending(false);
     }
@@ -335,27 +570,7 @@ export default function Home() {
       return;
     }
 
-    setChatPending(true);
-    setError(null);
-
-    try {
-      const response = await requestJson<ChatResponse>("/api/ai/chat", {
-        method: "POST",
-        body: JSON.stringify({
-          prompt: prompt.trim(),
-        }),
-      });
-
-      if (response) {
-        setMessages(response.history);
-        setLatestMeta(response);
-      }
-      setPrompt("");
-    } catch (requestError) {
-      setError(getErrorMessage(requestError, "ส่งข้อความไม่สำเร็จ"));
-    } finally {
-      setChatPending(false);
-    }
+    await submitPrompt(prompt);
   }
 
   function handleClearPrompt() {
@@ -363,63 +578,38 @@ export default function Home() {
     promptRef.current = "";
     speechBasePromptRef.current = "";
     setError(null);
-    if (!speechActive && speechSupported) {
-      setSpeechStatus("กดค้างเพื่อพูด");
-    }
   }
 
-  function handleSpeechPointerDown(event: PointerEvent<HTMLButtonElement>) {
-    event.preventDefault();
-
-    if (!speechSupported || speechActive || !auth?.authenticated || chatPending) {
+  function startSpeechCapture() {
+    if (!speechSupported || !auth?.authenticated || chatPending || speechActive) {
       return;
     }
 
     const recognition = recognitionRef.current;
     if (!recognition) {
-      setSpeechStatus("ยังไม่พร้อมใช้งาน");
+      setError("ตัวรับเสียงยังไม่พร้อมใช้งาน");
       return;
     }
 
-    event.currentTarget.setPointerCapture(event.pointerId);
-    holdActiveRef.current = true;
-    manualStopRef.current = false;
-    speechBasePromptRef.current = prompt.trim();
+    speechBasePromptRef.current = promptRef.current.trim();
+    speechHeardInputRef.current = false;
     setError(null);
-    setSpeechStatus("กำลังเปิดไมโครโฟน...");
+    stopAssistantSpeaking();
 
     try {
       recognition.start();
     } catch {
-      holdActiveRef.current = false;
-      setSpeechStatus("ระบบรับเสียงกำลังทำงาน ลองใหม่อีกครั้ง");
+      setError("ระบบรับเสียงกำลังทำงาน ลองใหม่อีกครั้ง");
     }
-  }
-
-  function handleSpeechPointerUp(event: PointerEvent<HTMLButtonElement>) {
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId);
-    }
-    stopSpeechCapture();
-  }
-
-  function handleSpeechLostPointerCapture() {
-    stopSpeechCapture();
   }
 
   function stopSpeechCapture() {
-    holdActiveRef.current = false;
-    manualStopRef.current = true;
-
-    if (restartTimeoutRef.current !== null) {
-      window.clearTimeout(restartTimeoutRef.current);
-      restartTimeoutRef.current = null;
-    }
+    clearSpeechHoldStartTimeout();
+    clearSpeechIdleTimeout();
 
     const recognition = recognitionRef.current;
     if (!recognition) {
       setSpeechActive(false);
-      setSpeechStatus(speechSupported ? "กดค้างเพื่อพูด" : "ยังไม่พร้อมใช้งาน");
       return;
     }
 
@@ -427,154 +617,288 @@ export default function Home() {
       recognition.stop();
     } catch {
       setSpeechActive(false);
-      setSpeechStatus(speechSupported ? "กดค้างเพื่อพูด" : "ยังไม่พร้อมใช้งาน");
     }
+  }
+
+  function handleSpeechHoldStart(event?: ReactPointerEvent<HTMLButtonElement>) {
+    if (!auth?.authenticated || chatPending) {
+      return;
+    }
+
+    if (event) {
+      event.preventDefault();
+      event.currentTarget.setPointerCapture?.(event.pointerId);
+    }
+
+    if (speechActive) {
+      return;
+    }
+
+    clearSpeechHoldStartTimeout();
+    speechHoldTriggeredRef.current = false;
+    speechHoldStartTimeoutRef.current = window.setTimeout(() => {
+      speechHoldStartTimeoutRef.current = null;
+      speechHoldTriggeredRef.current = true;
+      startSpeechCapture();
+    }, SPEECH_HOLD_START_DELAY_MS);
+  }
+
+  function handleSpeechHoldEnd(event?: ReactPointerEvent<HTMLButtonElement>) {
+    if (event) {
+      event.preventDefault();
+
+      if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      }
+    }
+
+    clearSpeechHoldStartTimeout();
+
+    if (!speechHoldTriggeredRef.current) {
+      return;
+    }
+
+    speechHoldTriggeredRef.current = false;
+    stopSpeechCapture();
+  }
+
+  function handleSpeechKeyDown(event: ReactKeyboardEvent<HTMLButtonElement>) {
+    if (event.key !== " " && event.key !== "Enter") {
+      return;
+    }
+
+    event.preventDefault();
+
+    if (speechKeyHoldRef.current) {
+      return;
+    }
+
+    speechKeyHoldRef.current = true;
+    handleSpeechHoldStart();
+  }
+
+  function handleSpeechKeyUp(event: ReactKeyboardEvent<HTMLButtonElement>) {
+    if (event.key !== " " && event.key !== "Enter") {
+      return;
+    }
+
+    event.preventDefault();
+    speechKeyHoldRef.current = false;
+    handleSpeechHoldEnd();
   }
 
   return (
     <div className={styles.page}>
       <main className={styles.shell}>
         <header className={styles.topbar}>
-          <div className={styles.titleBlock}>
-            <h1>Gorilla AI Assistant</h1>
-            <p className={styles.subtle}>
-              {auth?.authenticated
-                ? `${auth.username} • ${auth.role}`
-                : authPending
-                  ? "กำลังตรวจสอบเซสชัน"
-                  : "เข้าสู่ระบบผู้ดูแล"}
-            </p>
+          <div className={styles.brand}>
+            <div className={styles.brandLockup}>
+              <div className={styles.brandLogo}>
+                <Image alt="Gorilla logo" priority sizes="88px" src={logoImage} />
+              </div>
+              <div className={styles.brandText}>
+                <h1>Gorilla</h1>
+                {auth?.authenticated ? (
+                  <p className={styles.subtle}>{`${auth.username} · ${auth.role}`}</p>
+                ) : null}
+              </div>
+            </div>
           </div>
 
-          <div className={styles.topbarActions}>
-            {latestMeta?.model ? <span className={styles.pill}>{latestMeta.model}</span> : null}
-            <span className={styles.pillMuted}>
-              {messages.length} message{messages.length === 1 ? "" : "s"}
-            </span>
-            {auth?.authenticated ? (
-              <>
-                <button
-                  className={styles.secondaryButton}
-                  disabled={chatPending}
-                  onClick={handleReset}
-                  type="button"
-                >
-                  ล้างแชต
-                </button>
-                <button
-                  className={styles.ghostButton}
-                  disabled={authPending}
-                  onClick={handleLogout}
-                  type="button"
-                >
-                  ออกจากระบบ
-                </button>
-              </>
-            ) : null}
-          </div>
+          {auth?.authenticated ? (
+            <div className={styles.topbarActions}>
+              {latestMeta?.model ? (
+                <span className={styles.infoChip}>โมเดล {latestMeta.model}</span>
+              ) : null}
+              <span className={styles.infoChipMuted}>{messages.length} ข้อความ</span>
+              <button
+                className={styles.secondaryButton}
+                disabled={chatPending}
+                onClick={handleReset}
+                type="button"
+              >
+                ล้างแชต
+              </button>
+              <button
+                className={styles.ghostButton}
+                disabled={authPending}
+                onClick={handleLogout}
+                type="button"
+              >
+                ออกจากระบบ
+              </button>
+            </div>
+          ) : null}
         </header>
 
-        {error ? <p className={styles.errorBanner}>{error}</p> : null}
+        <section className={styles.mainContent}>
+          <div className={styles.errorSlot}>{error ? <p className={styles.errorBanner}>{error}</p> : null}</div>
 
-        {auth?.authenticated ? (
-          <>
-            <section className={styles.chatTimeline}>
-              {messages.length === 0 ? (
-                <div className={styles.emptyState}>เริ่มแชตได้เลย</div>
-              ) : (
-                messages.map((message, index) => (
-                  <article
-                    className={
-                      message.role === "user"
-                        ? styles.userMessage
-                        : styles.assistantMessage
-                    }
-                    key={`${message.createdAt ?? "message"}-${index}`}
-                  >
-                    <div className={styles.messageMeta}>
-                      <span>{message.role === "user" ? "คุณ" : "ผู้ช่วย"}</span>
-                      <time>{formatTimestamp(message.createdAt)}</time>
+          {auth?.authenticated ? (
+            <section className={styles.workspace}>
+              <section className={`${styles.card} ${styles.chatPanel}`}>
+                <div className={styles.panelHeader}>
+                  <div className={styles.panelText}>
+                    <p className={styles.panelEyebrow}>Chat</p>
+                    <h2>แชตกับ Gorilla</h2>
+                  </div>
+                </div>
+
+                <section className={styles.chatArea}>
+                  <div className={styles.chatTimeline}>
+                    {messages.length === 0 ? (
+                      <div className={styles.emptyState}>พิมพ์ข้อความหรือกดเพื่อเริ่มพูด</div>
+                    ) : (
+                      messages.map((message, index) => (
+                        <article
+                          className={
+                            message.role === "user" ? styles.userMessage : styles.gorillaMessage
+                          }
+                          key={`${message.createdAt ?? "message"}-${message.role}-${index}`}
+                        >
+                          <div className={styles.messageMeta}>
+                            <span>{message.role === "user" ? "คุณ" : "Gorilla"}</span>
+                            <time>{formatTimestamp(message.createdAt)}</time>
+                          </div>
+                          <p>{message.content}</p>
+                        </article>
+                      ))
+                    )}
+                  </div>
+                </section>
+
+                <form className={styles.composer} onSubmit={handleSend}>
+                  <textarea
+                    className={styles.promptInput}
+                    disabled={chatPending}
+                    onChange={(event) => setPrompt(event.target.value)}
+                    placeholder="พิมพ์ข้อความหรือกดเพื่อเริ่มพูด..."
+                    rows={4}
+                    value={prompt}
+                  />
+
+                  <div className={styles.composerFooter}>
+                    <button
+                      aria-label={speechActive ? "Release to stop speech to text" : "Hold to start speech to text"}
+                      className={`${styles.speechButton} ${
+                        speechActive ? styles.speechButtonActive : ""
+                      }`}
+                      disabled={!speechSupported || !auth?.authenticated || chatPending}
+                      onBlur={() => {
+                        speechKeyHoldRef.current = false;
+                        handleSpeechHoldEnd();
+                      }}
+                      onKeyDown={handleSpeechKeyDown}
+                      onKeyUp={handleSpeechKeyUp}
+                      onPointerCancel={handleSpeechHoldEnd}
+                      onPointerDown={handleSpeechHoldStart}
+                      onPointerLeave={handleSpeechHoldEnd}
+                      onPointerUp={handleSpeechHoldEnd}
+                      type="button"
+                    >
+                      <span className={styles.speechButtonLabel}>{speechButtonLabel}</span>
+                    </button>
+
+                    <div className={styles.composerActions}>
+                      <button
+                        className={styles.secondaryButton}
+                        disabled={chatPending || prompt.trim().length === 0}
+                        onClick={handleClearPrompt}
+                        type="button"
+                      >
+                        ล้างข้อความ
+                      </button>
+                      <button className={styles.primaryButton} disabled={!canSend} type="submit">
+                        {chatPending ? "กำลังส่ง..." : "ส่งข้อความ"}
+                      </button>
                     </div>
-                    <p>{message.content}</p>
-                  </article>
-                ))
-              )}
-            </section>
+                  </div>
+                </form>
+              </section>
 
-            <form className={styles.composer} onSubmit={handleSend}>
-              <textarea
-                className={styles.promptInput}
-                disabled={chatPending}
-                onChange={(event) => setPrompt(event.target.value)}
-                placeholder="พิมพ์ข้อความ..."
-                rows={4}
-                value={prompt}
-              />
-              <div className={styles.composerFooter}>
-                <div className={styles.speechGroup}>
-                  <button
-                    aria-label="Hold to speak"
-                    className={`${styles.speechButton} ${
-                      speechActive ? styles.speechButtonActive : ""
-                    }`}
-                  disabled={!speechSupported || !auth?.authenticated || chatPending}
-                  onLostPointerCapture={handleSpeechLostPointerCapture}
-                  onPointerCancel={handleSpeechLostPointerCapture}
-                  onPointerDown={handleSpeechPointerDown}
-                  onPointerUp={handleSpeechPointerUp}
-                  type="button"
-                >
-                  <span className={styles.speechButtonIcon}>●</span>
-                  <span className={styles.speechButtonLabel}>
-                      {speechActive ? "ปล่อยเพื่อหยุด" : "กดค้างเพื่อพูด"}
-                    </span>
-                  </button>
-                  <span className={styles.subtle}>{chatPending ? "กำลังสร้างคำตอบ..." : speechStatus}</span>
+              <aside className={`${styles.card} ${styles.avatarPanel}`}>
+                <div className={styles.panelHeader}>
+                  <div className={styles.panelText}>
+                    <p className={styles.panelEyebrow}>Avatar</p>
+                    <h2>Gorilla</h2>
+                  </div>
                 </div>
-                <div className={styles.composerActions}>
-                  <button
-                    className={styles.secondaryButton}
-                    disabled={chatPending || prompt.trim().length === 0}
-                    onClick={handleClearPrompt}
-                    type="button"
-                  >
-                    ล้างข้อความ
-                  </button>
-                  <button className={styles.primaryButton} disabled={!canSend} type="submit">
-                    {chatPending ? "กำลังส่ง..." : "ส่งข้อความ"}
-                  </button>
+
+                <div className={styles.avatarStageWrap}>
+                  <Image
+                    alt=""
+                    className={styles.stageBanner}
+                    fill
+                    priority
+                    sizes="(max-width: 1160px) 100vw, 42vw"
+                    src={bannerImage}
+                  />
+                  <div className={styles.stageShade} />
+                  <div className={styles.stageLogoMark}>
+                    <Image alt="" sizes="96px" src={logoImage} />
+                  </div>
+                  <GorillaAvatarStage mode={avatarMode} />
                 </div>
+              </aside>
+            </section>
+          ) : (
+            <section className={styles.loginLayout}>
+              <div className={`${styles.card} ${styles.loginCard}`}>
+                <div className={styles.loginHeader}>
+                  <p className={styles.panelEyebrow}>Admin Login</p>
+                  <h2 className={styles.loginTitle}>เข้าสู่ระบบ</h2>
+                </div>
+
+                <form className={styles.loginForm} onSubmit={handleLogin}>
+                  <label className={styles.field}>
+                    <span>ชื่อผู้ใช้</span>
+                    <input
+                      autoComplete="username"
+                      onChange={(event) => setUsername(event.target.value)}
+                      placeholder="admin"
+                      value={username}
+                    />
+                  </label>
+                  <label className={styles.field}>
+                    <span>รหัสผ่าน</span>
+                    <input
+                      autoComplete="current-password"
+                      onChange={(event) => setPassword(event.target.value)}
+                      placeholder="กรอกรหัสผ่าน"
+                      type="password"
+                      value={password}
+                    />
+                  </label>
+                  <button className={styles.primaryButton} disabled={authPending} type="submit">
+                    {authPending ? "กำลังเข้าสู่ระบบ..." : "เข้าสู่ระบบ"}
+                  </button>
+                </form>
               </div>
-            </form>
-          </>
-        ) : (
-          <section className={styles.loginCard}>
-            <form className={styles.loginForm} onSubmit={handleLogin}>
-              <label className={styles.field}>
-                <span>ชื่อผู้ใช้</span>
-                <input
-                  autoComplete="username"
-                  onChange={(event) => setUsername(event.target.value)}
-                  placeholder="admin"
-                  value={username}
-                />
-              </label>
-              <label className={styles.field}>
-                <span>รหัสผ่าน</span>
-                <input
-                  autoComplete="current-password"
-                  onChange={(event) => setPassword(event.target.value)}
-                  placeholder="กรอกรหัสผ่าน"
-                  type="password"
-                  value={password}
-                />
-              </label>
-              <button className={styles.primaryButton} disabled={authPending} type="submit">
-                {authPending ? "กำลังเข้าสู่ระบบ..." : "เข้าสู่ระบบ"}
-              </button>
-            </form>
-          </section>
-        )}
+
+              <aside className={`${styles.card} ${styles.loginPreview}`}>
+                <div className={styles.panelText}>
+                  <p className={styles.panelEyebrow}>Preview</p>
+                  <h2>Gorilla Avatar</h2>
+                </div>
+                <div className={styles.loginStageWrap}>
+                  <Image
+                    alt=""
+                    className={styles.stageBanner}
+                    fill
+                    priority
+                    sizes="(max-width: 1160px) 100vw, 45vw"
+                    src={bannerImage}
+                  />
+                  <div className={styles.stageShade} />
+                  <div className={styles.stageLogoMark}>
+                    <Image alt="" sizes="96px" src={logoImage} />
+                  </div>
+                  <GorillaAvatarStage mode="idle" />
+                </div>
+              </aside>
+            </section>
+          )}
+        </section>
       </main>
     </div>
   );

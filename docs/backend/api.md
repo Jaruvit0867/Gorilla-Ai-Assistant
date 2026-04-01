@@ -12,8 +12,8 @@ http://localhost:8080
 
 This API uses session cookies.
 
-- Login returns a session cookie
-- Later requests must reuse that cookie
+- login returns a session cookie
+- later requests must reuse that cookie
 - `sessionId` in the JSON body is not a bearer token
 
 ## `POST /api/auth/login`
@@ -78,14 +78,14 @@ Response:
 
 ## `POST /api/ai/chat`
 
-Protected endpoint. Requires authenticated admin session.
+Protected endpoint. Requires an authenticated admin session.
 
 Request:
 
 ```json
 {
-  "prompt": "สรุปโครงการนี้สั้น ๆ",
-  "systemPrompt": "คุณคือผู้ช่วยภาษาไทย",
+  "prompt": "Banoffee Bowl ราคาเท่าไหร่",
+  "systemPrompt": "ตอบสั้น ๆ เป็นภาษาไทย",
   "temperature": 0.7,
   "maxOutputTokens": 800
 }
@@ -94,14 +94,13 @@ Request:
 Notes:
 
 - `prompt` is required
-- `systemPrompt`, `temperature`, `maxOutputTokens` are optional
-- `threadId` exists in `ChatRequest` but is not used by the current session-based flow
+- `systemPrompt`, `temperature`, and `maxOutputTokens` are optional
 
 Response:
 
 ```json
 {
-  "answer": "นี่คือคำตอบจากโมเดล",
+  "answer": "Banoffee Bowl ราคา ... บาท",
   "model": "gpt-4.1",
   "responseId": "resp_...",
   "createdAt": "2026-04-01T00:00:00Z",
@@ -109,12 +108,12 @@ Response:
   "history": [
     {
       "role": "user",
-      "content": "สรุปโครงการนี้สั้น ๆ",
+      "content": "Banoffee Bowl ราคาเท่าไหร่",
       "createdAt": "2026-04-01T00:00:00Z"
     },
     {
       "role": "assistant",
-      "content": "นี่คือคำตอบจากโมเดล",
+      "content": "Banoffee Bowl ราคา ... บาท",
       "createdAt": "2026-04-01T00:00:01Z"
     }
   ],
@@ -160,6 +159,25 @@ Response:
 }
 ```
 
+## `POST /api/speech/tts`
+
+Protected endpoint. Synthesizes assistant text to MP3 audio with Azure Speech.
+
+Request:
+
+```json
+{
+  "text": "สวัสดีค่ะ วันนี้อยากดูเมนูอะไรดีคะ"
+}
+```
+
+Response:
+
+```text
+200 OK
+Content-Type: audio/mpeg
+```
+
 ## Error Behavior
 
 Typical statuses:
@@ -169,5 +187,5 @@ Typical statuses:
 - `400` invalid request body
 - `401` unauthenticated
 - `403` authenticated but not authorized
-- `502` upstream Azure AI Foundry failure
+- `502` upstream Azure AI Foundry or Azure Speech failure
 - `503` missing configuration
