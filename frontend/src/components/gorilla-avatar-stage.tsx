@@ -2,7 +2,7 @@
 
 import { Canvas, useFrame, useLoader } from "@react-three/fiber";
 import type { ThreeEvent } from "@react-three/fiber";
-import { Suspense, useEffect, useMemo, useRef } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import type { Group, Material, Object3D } from "three";
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
@@ -21,16 +21,19 @@ type GLTFAsset = {
 
 type BoneKey = "head" | "jaw";
 
-type ActionName = "gorillaidle" | "gorillarun" | "gorillastomp" | "gorillaattack";
+type ActionName = "gorillaidle" | "gorillarun";
 
 const gorillaModelUrl = new URL("../../assets/models/gorilla.glb", import.meta.url).toString();
 const jawOpenQuaternion = new THREE.Quaternion(0.0619, 0.0183, 0.7448, 0.6641).normalize();
-const interactiveAnimationNames: ActionName[] = ["gorillastomp"];
-
 export default function GorillaAvatarStage({ mode }: GorillaAvatarStageProps) {
+  const isMobileViewport = useMobileViewport();
+  const cameraPosition: [number, number, number] = isMobileViewport
+    ? [0.35, 1.54, 10.7]
+    : [0.35, 1.52, 11.4];
+
   return (
     <Canvas
-      camera={{ fov: 30, position: [0.35, 1.5, 10.9] }}
+      camera={{ fov: 30, position: cameraPosition }}
       dpr={[1, 1.6]}
       gl={{ alpha: true, antialias: true }}
     >
@@ -48,7 +51,7 @@ export default function GorillaAvatarStage({ mode }: GorillaAvatarStageProps) {
       <pointLight color="#fff5e2" intensity={9} position={[0, 1.8, 4.2]} />
       <SceneBackdrop />
       <Suspense fallback={null}>
-        <GorillaModel mode={mode} />
+        <GorillaModel isMobileViewport={isMobileViewport} mode={mode} />
       </Suspense>
     </Canvas>
   );
@@ -82,17 +85,20 @@ function SceneBackdrop() {
   );
 }
 
-function GorillaModel({ mode }: GorillaAvatarStageProps) {
+function GorillaModel({
+  mode,
+  isMobileViewport,
+}: GorillaAvatarStageProps & { isMobileViewport: boolean }) {
   const gltf = useLoader(GLTFLoader, gorillaModelUrl) as GLTFAsset;
   const wrapperRef = useRef<Group>(null);
   const mixerRef = useRef<THREE.AnimationMixer | null>(null);
-  const activeInteractiveActionRef = useRef<THREE.AnimationAction | null>(null);
   const actionsRef = useRef<Partial<Record<ActionName, THREE.AnimationAction>>>({});
   const boneRefs = useRef<Record<BoneKey, Object3D | null>>({
     head: null,
     jaw: null,
   });
   const boneBaseRef = useRef<Partial<Record<BoneKey, THREE.Quaternion>>>({});
+  const clickAccentRef = useRef(0);
 
   const scene = useMemo(() => {
     const clonedScene = cloneSkeleton(gltf.scene) as Group;
@@ -119,7 +125,7 @@ function GorillaModel({ mode }: GorillaAvatarStageProps) {
     bounds.getSize(size);
     bounds.getCenter(center);
 
-    const targetHeight = 0.35;
+    const targetHeight = isMobileViewport ? 0.35 : 0.33;
     const scaleFactor = targetHeight / Math.max(size.y, 0.001);
     clonedScene.scale.setScalar(scaleFactor);
     clonedScene.position.set(
@@ -129,7 +135,7 @@ function GorillaModel({ mode }: GorillaAvatarStageProps) {
     );
 
     return clonedScene;
-  }, [gltf.scene]);
+  }, [gltf.scene, isMobileViewport]);
 
   const clips = useMemo(() => sanitizeAnimationClips(gltf.animations), [gltf.animations]);
 
@@ -159,58 +165,38 @@ function GorillaModel({ mode }: GorillaAvatarStageProps) {
         action.setEffectiveWeight(0);
         action.play();
       } else {
-        action.enabled = false;
-        action.setLoop(THREE.LoopOnce, 1);
-        action.clampWhenFinished = false;
-        action.setEffectiveTimeScale(name === "gorillaattack" ? 0.94 : 0.82);
-        action.setEffectiveWeight(0);
+        continue;
       }
 
       actions[name] = action;
     }
-
-    const handleFinished = (event: { action?: THREE.AnimationAction }) => {
-      const finishedAction = event.action;
-      if (!finishedAction || activeInteractiveActionRef.current !== finishedAction) {
-        return;
-      }
-
-      finishedAction.stop();
-      finishedAction.enabled = false;
-      finishedAction.setEffectiveWeight(0);
-      activeInteractiveActionRef.current = null;
-    };
-
-    mixer.addEventListener("finished", handleFinished as never);
     mixerRef.current = mixer;
     actionsRef.current = actions;
 
     return () => {
-      mixer.removeEventListener("finished", handleFinished as never);
       mixer.stopAllAction();
       actionsRef.current = {};
-      activeInteractiveActionRef.current = null;
       mixerRef.current = null;
     };
   }, [clips, scene]);
 
   useFrame((state, delta) => {
     mixerRef.current?.update(delta);
+    clickAccentRef.current = THREE.MathUtils.damp(clickAccentRef.current, 0, 4.6, delta);
 
     const idleAction = actionsRef.current.gorillaidle;
     const speakingAction = actionsRef.current.gorillarun;
-    const interactiveAction = activeInteractiveActionRef.current;
-    const hasInteractiveAnimation = Boolean(interactiveAction);
+    const clickAccent = clickAccentRef.current;
 
     dampActionWeight(
       idleAction,
-      hasInteractiveAnimation ? 0.18 : mode === "speaking" ? 0.36 : 1,
+      mode === "speaking" ? 0.36 : 1,
       delta,
       6.5,
     );
     dampActionWeight(
       speakingAction,
-      !hasInteractiveAnimation && mode === "speaking" ? 0.96 : 0,
+      mode === "speaking" ? 0.96 : 0,
       delta,
       7.5,
     );
@@ -221,6 +207,8 @@ function GorillaModel({ mode }: GorillaAvatarStageProps) {
     const speakBounce =
       mode === "speaking" ? Math.abs(Math.sin(elapsed * 3.1)) * 0.035 : 0;
     const speakHead = mode === "speaking" ? Math.sin(elapsed * 2.8) * 0.04 : 0;
+    const clickBob = Math.sin(clickAccent * Math.PI) * 0.1;
+    const clickTurn = Math.sin(clickAccent * Math.PI) * 0.08;
 
     if (wrapperRef.current) {
       wrapperRef.current.position.x = THREE.MathUtils.lerp(
@@ -230,7 +218,7 @@ function GorillaModel({ mode }: GorillaAvatarStageProps) {
       );
       wrapperRef.current.position.y = THREE.MathUtils.lerp(
         wrapperRef.current.position.y,
-        -1.92 + breathe + speakBounce * 0.5,
+        (isMobileViewport ? -1.8 : -1.84) + breathe + speakBounce * 0.5 + clickBob * 0.45,
         0.08,
       );
       wrapperRef.current.position.z = THREE.MathUtils.lerp(
@@ -240,17 +228,17 @@ function GorillaModel({ mode }: GorillaAvatarStageProps) {
       );
       wrapperRef.current.rotation.x = THREE.MathUtils.lerp(
         wrapperRef.current.rotation.x,
-        thinkTilt * 0.35,
+        thinkTilt * 0.35 - clickBob * 0.12,
         0.08,
       );
       wrapperRef.current.rotation.y = THREE.MathUtils.lerp(
         wrapperRef.current.rotation.y,
-        0.24,
+        0.24 + clickTurn,
         0.08,
       );
       wrapperRef.current.rotation.z = THREE.MathUtils.lerp(
         wrapperRef.current.rotation.z,
-        0,
+        clickTurn * 0.12,
         0.08,
       );
     }
@@ -259,7 +247,12 @@ function GorillaModel({ mode }: GorillaAvatarStageProps) {
       applyBoneOffset(
         boneRefs.current.head,
         boneBaseRef.current.head,
-        new THREE.Euler(speakHead * 0.18, speakHead * 0.4, 0, "XYZ"),
+        new THREE.Euler(
+          speakHead * 0.18 - clickBob * 0.14,
+          speakHead * 0.4 + clickTurn * 0.4,
+          0,
+          "XYZ",
+        ),
         0.16,
       );
     }
@@ -276,45 +269,26 @@ function GorillaModel({ mode }: GorillaAvatarStageProps) {
     }
 
     state.camera.position.x = THREE.MathUtils.lerp(state.camera.position.x, 0.35, delta * 1.4);
-    state.camera.position.y = THREE.MathUtils.lerp(state.camera.position.y, 1.5, delta * 1.4);
-    state.camera.position.z = THREE.MathUtils.lerp(state.camera.position.z, 10.9, delta * 1.4);
+    state.camera.position.y = THREE.MathUtils.lerp(
+      state.camera.position.y,
+      isMobileViewport ? 1.54 : 1.52,
+      delta * 1.4,
+    );
+    state.camera.position.z = THREE.MathUtils.lerp(
+      state.camera.position.z,
+      isMobileViewport ? 10.7 : 11.4,
+      delta * 1.4,
+    );
     state.camera.lookAt(0.72, 0.46, 0);
   });
 
   function handlePointerDown(event: ThreeEvent<PointerEvent>) {
     event.stopPropagation();
-
-    const availableActions = interactiveAnimationNames.filter((name) => actionsRef.current[name]);
-    if (availableActions.length === 0) {
-      return;
-    }
-
-    const nextName =
-      availableActions[Math.floor(Math.random() * availableActions.length)] ?? null;
-    const nextAction = nextName ? actionsRef.current[nextName] : null;
-    if (!nextAction) {
-      return;
-    }
-
-    if (activeInteractiveActionRef.current) {
-      activeInteractiveActionRef.current.stop();
-      activeInteractiveActionRef.current.enabled = false;
-      activeInteractiveActionRef.current.setEffectiveWeight(0);
-      activeInteractiveActionRef.current = null;
-    }
-
-    nextAction.reset();
-    // eslint-disable-next-line react-hooks/immutability
-    nextAction.enabled = true;
-    nextAction.setLoop(THREE.LoopOnce, 1);
-    nextAction.clampWhenFinished = false;
-    nextAction.setEffectiveWeight(1);
-    nextAction.play();
-    activeInteractiveActionRef.current = nextAction;
+    clickAccentRef.current = 1;
   }
 
   return (
-    <group ref={wrapperRef} position={[0.72, -1.92, 0]}>
+    <group ref={wrapperRef} position={[0.72, isMobileViewport ? -1.8 : -1.84, 0]}>
       <mesh onPointerDown={handlePointerDown} position={[0, 1.48, 0.08]} renderOrder={-1}>
         <sphereGeometry args={[2.2, 18, 18]} />
         <meshBasicMaterial depthWrite={false} opacity={0} transparent />
@@ -406,4 +380,24 @@ function applyBoneOffset(
     new THREE.Quaternion().setFromEuler(offset),
   );
   bone.quaternion.slerp(targetQuaternion, blend);
+}
+
+function useMobileViewport() {
+  const [isMobileViewport, setIsMobileViewport] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const mediaQuery = window.matchMedia("(max-width: 860px)");
+    const syncViewport = () => setIsMobileViewport(mediaQuery.matches);
+
+    syncViewport();
+    mediaQuery.addEventListener("change", syncViewport);
+
+    return () => mediaQuery.removeEventListener("change", syncViewport);
+  }, []);
+
+  return isMobileViewport;
 }

@@ -90,7 +90,7 @@ type BrowserSpeechRecognition = {
 
 type BrowserSpeechRecognitionConstructor = new () => BrowserSpeechRecognition;
 
-const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") ?? "";
+const apiBaseUrl = resolveApiBaseUrl();
 
 const SPEECH_IDLE_AUTO_STOP_MS = 5_000;
 const SPEECH_HOLD_START_DELAY_MS = 180;
@@ -154,6 +154,8 @@ export default function Home() {
 
     return speechActive ? "ปล่อยเพื่อหยุด" : "กดค้างเพื่อพูด";
   }, [speechActive, speechSupported]);
+
+  const isAuthenticated = Boolean(auth?.authenticated);
 
   async function requestJson<T>(path: string, init?: RequestInit): Promise<T | null> {
     const response = await fetch(`${apiBaseUrl}${path}`, {
@@ -688,7 +690,7 @@ export default function Home() {
 
   return (
     <div className={styles.page}>
-      <main className={styles.shell}>
+      <main className={`${styles.shell} ${isAuthenticated ? styles.shellChat : ""}`}>
         <header className={styles.topbar}>
           <div className={styles.brand}>
             <div className={styles.brandLockup}>
@@ -730,11 +732,11 @@ export default function Home() {
           ) : null}
         </header>
 
-        <section className={styles.mainContent}>
+        <section className={`${styles.mainContent} ${isAuthenticated ? styles.mainContentChat : ""}`}>
           <div className={styles.errorSlot}>{error ? <p className={styles.errorBanner}>{error}</p> : null}</div>
 
           {auth?.authenticated ? (
-            <section className={styles.workspace}>
+            <section className={`${styles.workspace} ${styles.workspaceCompact}`}>
               <section className={`${styles.card} ${styles.chatPanel}`}>
                 <div className={styles.panelHeader}>
                   <div className={styles.panelText}>
@@ -966,6 +968,22 @@ function unauthenticatedSession(): AuthSessionResponse {
     role: null,
     sessionId: null,
   };
+}
+
+function resolveApiBaseUrl() {
+  const configuredBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "");
+  if (configuredBaseUrl) {
+    return configuredBaseUrl;
+  }
+
+  if (typeof window !== "undefined") {
+    const { hostname } = window.location;
+    if (hostname === "localhost" || hostname === "127.0.0.1") {
+      return "http://localhost:8080";
+    }
+  }
+
+  return "";
 }
 
 declare global {
