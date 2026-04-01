@@ -689,7 +689,7 @@ export default function Home() {
   }
 
   return (
-    <div className={styles.page}>
+    <div className={`${styles.page} ${isAuthenticated ? styles.pageChat : ""}`}>
       <main className={`${styles.shell} ${isAuthenticated ? styles.shellChat : ""}`}>
         <header className={styles.topbar}>
           <div className={styles.brand}>
