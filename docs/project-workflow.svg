@@ -1,0 +1,164 @@
+<svg width="1920" height="1180" viewBox="0 0 1920 1180" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1920" height="1180" fill="#F7F2E8"/>
+
+  <defs>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="160%">
+      <feDropShadow dx="0" dy="16" stdDeviation="24" flood-color="#1C2F24" flood-opacity="0.08"/>
+    </filter>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="9" markerHeight="9" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#203529"/>
+    </marker>
+  </defs>
+
+  <text x="60" y="88" fill="#111111" font-size="64" font-family="Arial, Helvetica, sans-serif" font-weight="700">
+    Workflow:
+  </text>
+
+  <rect x="56" y="128" width="1808" height="408" rx="36" fill="none" stroke="#232323" stroke-width="8" stroke-dasharray="14 12"/>
+  <text x="86" y="168" fill="#57675E" font-size="24" font-family="Arial, Helvetica, sans-serif" font-style="italic">
+    Runtime flow
+  </text>
+
+  <rect x="108" y="220" width="300" height="230" rx="38" fill="#FDB172" filter="url(#shadow)"/>
+  <text x="176" y="264" fill="#4D5B60" font-size="26" font-family="Arial, Helvetica, sans-serif" font-style="italic">
+    Input layer
+  </text>
+  <text x="150" y="336" fill="#203529" font-size="36" font-family="Arial, Helvetica, sans-serif" font-weight="700">
+    User
+  </text>
+  <text x="150" y="378" fill="#203529" font-size="24" font-family="Arial, Helvetica, sans-serif">
+    Text input
+  </text>
+  <text x="150" y="412" fill="#203529" font-size="24" font-family="Arial, Helvetica, sans-serif">
+    Hold-to-talk microphone
+  </text>
+
+  <rect x="502" y="196" width="484" height="278" rx="40" fill="#84AEE0" filter="url(#shadow)"/>
+  <text x="652" y="240" fill="#4D5B60" font-size="26" font-family="Arial, Helvetica, sans-serif" font-style="italic">
+    Frontend layer
+  </text>
+  <text x="568" y="316" fill="#203529" font-size="38" font-family="Arial, Helvetica, sans-serif" font-weight="700">
+    Next.js + React
+  </text>
+  <text x="568" y="362" fill="#203529" font-size="24" font-family="Arial, Helvetica, sans-serif">
+    Chat UI
+  </text>
+  <text x="568" y="396" fill="#203529" font-size="24" font-family="Arial, Helvetica, sans-serif">
+    Browser Speech Recognition
+  </text>
+  <text x="568" y="430" fill="#203529" font-size="24" font-family="Arial, Helvetica, sans-serif">
+    Three.js Gorilla avatar
+  </text>
+
+  <rect x="1080" y="196" width="510" height="278" rx="40" fill="#FFB3A5" filter="url(#shadow)"/>
+  <text x="1244" y="240" fill="#4D5B60" font-size="26" font-family="Arial, Helvetica, sans-serif" font-style="italic">
+    Backend layer
+  </text>
+  <text x="1148" y="316" fill="#203529" font-size="38" font-family="Arial, Helvetica, sans-serif" font-weight="700">
+    Spring Boot API
+  </text>
+  <text x="1148" y="362" fill="#203529" font-size="24" font-family="Arial, Helvetica, sans-serif">
+    Spring Security admin auth
+  </text>
+  <text x="1148" y="396" fill="#203529" font-size="24" font-family="Arial, Helvetica, sans-serif">
+    HttpSession chat history
+  </text>
+  <text x="1148" y="430" fill="#203529" font-size="24" font-family="Arial, Helvetica, sans-serif">
+    REST APIs: /api/auth /api/ai /api/speech
+  </text>
+
+  <rect x="1622" y="220" width="206" height="230" rx="34" fill="#F3F8FC" filter="url(#shadow)"/>
+  <text x="1652" y="262" fill="#4D5B60" font-size="24" font-family="Arial, Helvetica, sans-serif" font-style="italic">
+    Output layer
+  </text>
+  <text x="1650" y="334" fill="#203529" font-size="32" font-family="Arial, Helvetica, sans-serif" font-weight="700">
+    Browser UI
+  </text>
+  <text x="1650" y="374" fill="#203529" font-size="22" font-family="Arial, Helvetica, sans-serif">
+    Chat response
+  </text>
+  <text x="1650" y="406" fill="#203529" font-size="22" font-family="Arial, Helvetica, sans-serif">
+    Gorilla animation
+  </text>
+  <text x="1650" y="438" fill="#203529" font-size="22" font-family="Arial, Helvetica, sans-serif">
+    Audio playback
+  </text>
+
+  <path d="M408 340 H496" stroke="#203529" stroke-width="6" marker-end="url(#arrow)"/>
+  <text x="420" y="316" fill="#57675E" font-size="20" font-family="Arial, Helvetica, sans-serif">
+    text / transcript
+  </text>
+
+  <path d="M986 340 H1074" stroke="#203529" stroke-width="6" marker-end="url(#arrow)"/>
+  <text x="996" y="316" fill="#57675E" font-size="20" font-family="Arial, Helvetica, sans-serif">
+    authenticated fetch
+  </text>
+
+  <path d="M1590 340 H1616" stroke="#203529" stroke-width="6" marker-end="url(#arrow)"/>
+  <text x="1574" y="316" fill="#57675E" font-size="20" font-family="Arial, Helvetica, sans-serif">
+    result
+  </text>
+
+  <path d="M1334 474 V604" stroke="#203529" stroke-width="6" marker-end="url(#arrow)"/>
+
+  <rect x="140" y="626" width="1420" height="470" rx="38" fill="none" stroke="#E43A32" stroke-width="8" stroke-dasharray="14 12"/>
+  <text x="172" y="668" fill="#7B5953" font-size="24" font-family="Arial, Helvetica, sans-serif" font-style="italic">
+    AI and knowledge services
+  </text>
+
+  <rect x="204" y="760" width="300" height="210" rx="36" fill="#FDB172" filter="url(#shadow)"/>
+  <text x="248" y="834" fill="#203529" font-size="34" font-family="Arial, Helvetica, sans-serif" font-weight="700">
+    Menu knowledge files
+  </text>
+  <text x="248" y="878" fill="#203529" font-size="24" font-family="Arial, Helvetica, sans-serif">
+    Markdown / TXT documents
+  </text>
+  <text x="248" y="912" fill="#203529" font-size="24" font-family="Arial, Helvetica, sans-serif">
+    Indexed for RAG
+  </text>
+
+  <rect x="616" y="736" width="420" height="258" rx="38" fill="#84AEE0" filter="url(#shadow)"/>
+  <text x="678" y="812" fill="#203529" font-size="36" font-family="Arial, Helvetica, sans-serif" font-weight="700">
+    Azure AI Foundry Agent
+  </text>
+  <text x="678" y="858" fill="#203529" font-size="24" font-family="Arial, Helvetica, sans-serif">
+    Prompt agent
+  </text>
+  <text x="678" y="892" fill="#203529" font-size="24" font-family="Arial, Helvetica, sans-serif">
+    Retrieval on menu knowledge
+  </text>
+  <text x="678" y="926" fill="#203529" font-size="24" font-family="Arial, Helvetica, sans-serif">
+    Grounded answer generation
+  </text>
+
+  <rect x="1126" y="760" width="330" height="210" rx="36" fill="#84AEE0" filter="url(#shadow)"/>
+  <text x="1182" y="834" fill="#203529" font-size="36" font-family="Arial, Helvetica, sans-serif" font-weight="700">
+    Azure Speech TTS
+  </text>
+  <text x="1182" y="878" fill="#203529" font-size="24" font-family="Arial, Helvetica, sans-serif">
+    Text to Speech
+  </text>
+  <text x="1182" y="912" fill="#203529" font-size="24" font-family="Arial, Helvetica, sans-serif">
+    MP3 audio generation
+  </text>
+
+  <path d="M504 860 H610" stroke="#203529" stroke-width="6" marker-end="url(#arrow)"/>
+  <text x="516" y="836" fill="#57675E" font-size="20" font-family="Arial, Helvetica, sans-serif">
+    indexed knowledge
+  </text>
+
+  <path d="M1188 474 V640 H826 V730" stroke="#203529" stroke-width="6" marker-end="url(#arrow)"/>
+  <text x="1010" y="620" fill="#57675E" font-size="20" font-family="Arial, Helvetica, sans-serif">
+    prompt + session history
+  </text>
+
+  <path d="M870 736 V604 H1260 V474" stroke="#203529" stroke-width="6" marker-end="url(#arrow)"/>
+  <text x="1008" y="700" fill="#57675E" font-size="20" font-family="Arial, Helvetica, sans-serif">
+    grounded answer
+  </text>
+
+  <path d="M1291 474 V754" stroke="#203529" stroke-width="6" marker-end="url(#arrow)"/>
+  <text x="1310" y="620" fill="#57675E" font-size="20" font-family="Arial, Helvetica, sans-serif">
+    text for TTS
+  </text>
+</svg>
