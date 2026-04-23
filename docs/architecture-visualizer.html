@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gorilla Architecture — Whiteboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=Caveat:wght@500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #141824;
+  --bg-dot: #1e2538;
+  --text: #c9d1d9;
+  --text-bright: #f0f3f6;
+  --text-dim: #6e7a8a;
+  --border: #2a3040;
+  --accent: #f59e0b;
+  --accent-glow: rgba(245,158,11,0.4);
+  --c-user: #10b981; --c-fe: #3b82f6; --c-sec: #ef4444;
+  --c-ctrl: #8b5cf6; --c-svc: #f59e0b; --c-az: #06b6d4; --c-sess: #ec4899;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+html,body{height:100%;overflow:hidden;}
+body{font-family:'IBM Plex Sans Thai',sans-serif;background:var(--bg);color:var(--text);}
+
+/* Canvas */
+#canvas-wrap{
+  position:absolute;inset:0;overflow:hidden;cursor:grab;
+  background:
+    radial-gradient(ellipse 80% 60% at 50% 40%,#1a2236 0%,var(--bg) 100%);
+  background-size:cover;
+}
+#canvas-wrap::before{
+  content:'';position:absolute;inset:0;
+  background-image:radial-gradient(circle,var(--bg-dot) 1px,transparent 1px);
+  background-size:36px 36px;opacity:.6;pointer-events:none;
+}
+#canvas-wrap.grabbing{cursor:grabbing;}
+#canvas{position:absolute;top:0;left:0;transform-origin:0 0;will-change:transform;}
+svg#lines{position:absolute;top:0;left:0;overflow:visible;pointer-events:none;width:1800px;height:900px;}
+svg#lines path{
+  fill:none;stroke:#2e3650;stroke-width:2.2;
+  stroke-linecap:round;stroke-linejoin:round;
+  transition:stroke .4s,stroke-width .4s,opacity .4s,filter .4s;
+}
+svg#lines path.active{
+  stroke:var(--accent);stroke-width:3;
+  stroke-dasharray:10 5;
+  filter:drop-shadow(0 0 8px var(--accent-glow));
+  animation:flowDash .8s linear infinite;
+}
+svg#lines path.dimmed{opacity:.1;}
+@keyframes flowDash{to{stroke-dashoffset:-15;}}
+svg#lines text{
+  font-family:'Caveat',cursive;font-size:14px;fill:#5a6577;
+  transition:fill .4s,opacity .4s;pointer-events:none;
+}
+svg#lines text.active{fill:var(--accent);font-weight:600;}
+svg#lines text.dimmed{opacity:.1;}
+
+/* Node cards */
+.node{
+  position:absolute;width:210px;
+  background:rgba(22,28,44,0.85);
+  backdrop-filter:blur(8px);
+  border:1.5px solid var(--border);
+  border-radius:12px;
+  padding:18px 16px 14px;
+  cursor:pointer;user-select:none;
+  transition:transform .3s cubic-bezier(.22,1,.36,1),box-shadow .3s,opacity .4s,border-color .4s;
+}
+.node::before{
+  content:'';position:absolute;top:0;left:0;right:0;height:3px;
+  border-radius:12px 12px 0 0;opacity:.8;
+}
+.node:hover{transform:translateY(-3px) scale(1.03);z-index:5;}
+.node.dimmed{opacity:.12;pointer-events:none;}
+.node.active-node{z-index:6;transform:translateY(-4px) scale(1.05);}
+.node-icon{font-size:26px;margin-bottom:6px;}
+.node-title{
+  font-family:'Caveat',cursive;font-size:22px;font-weight:700;
+  line-height:1.15;color:var(--text-bright);
+}
+.node-sub{font-size:11.5px;color:var(--text-dim);margin-top:4px;line-height:1.45;}
+
+/* Color variants */
+.node-user::before{background:var(--c-user);}
+.node-user.active-node{border-color:var(--c-user);box-shadow:0 0 28px rgba(16,185,129,.35);}
+.node-fe::before{background:var(--c-fe);}
+.node-fe.active-node{border-color:var(--c-fe);box-shadow:0 0 28px rgba(59,130,246,.35);}
+.node-sec::before{background:var(--c-sec);}
+.node-sec.active-node{border-color:var(--c-sec);box-shadow:0 0 28px rgba(239,68,68,.35);}
+.node-ctrl::before{background:var(--c-ctrl);}
+.node-ctrl.active-node{border-color:var(--c-ctrl);box-shadow:0 0 28px rgba(139,92,246,.35);}
+.node-svc::before{background:var(--c-svc);}
+.node-svc.active-node{border-color:var(--c-svc);box-shadow:0 0 28px rgba(245,158,11,.35);}
+.node-az::before{background:var(--c-az);}
+.node-az.active-node{border-color:var(--c-az);box-shadow:0 0 28px rgba(6,182,212,.35);}
+.node-sess::before{background:var(--c-sess);}
+.node-sess.active-node{border-color:var(--c-sess);box-shadow:0 0 28px rgba(236,72,153,.35);}
+
+/* Toolbar */
+#toolbar{
+  position:fixed;top:20px;left:50%;transform:translateX(-50%);z-index:100;
+  display:flex;gap:5px;padding:5px;
+  background:rgba(20,24,36,0.9);backdrop-filter:blur(16px);
+  border:1px solid var(--border);border-radius:12px;
+}
+.flow-btn{
+  padding:10px 20px;border:1.5px solid var(--border);border-radius:8px;
+  background:transparent;color:var(--text-dim);
+  font-family:'IBM Plex Sans Thai',sans-serif;font-size:13.5px;font-weight:600;
+  cursor:pointer;transition:all .2s;white-space:nowrap;
+}
+.flow-btn:hover{border-color:var(--accent);color:var(--text);}
+.flow-btn.active{background:var(--accent);border-color:var(--accent);color:#1a1f2e;font-weight:700;}
+
+/* Detail panel */
+#detail{
+  position:fixed;right:-480px;top:0;bottom:0;width:460px;
+  background:rgba(20,24,36,0.96);backdrop-filter:blur(20px);
+  border-left:1px solid var(--border);z-index:200;
+  transition:right .4s cubic-bezier(.22,1,.36,1);
+  overflow-y:auto;padding:30px 26px;
+}
+#detail.open{right:0;}
+#detail-close{
+  position:absolute;top:14px;right:14px;
+  width:34px;height:34px;border:1px solid var(--border);border-radius:8px;
+  background:transparent;color:var(--text-dim);font-size:17px;cursor:pointer;
+  transition:all .15s;
+}
+#detail-close:hover{border-color:var(--text);color:var(--text);}
+#detail h2{font-family:'Caveat',cursive;font-size:30px;font-weight:700;margin-bottom:4px;margin-top:8px;}
+#detail .d-file{font-size:12.5px;color:var(--text-dim);margin-bottom:18px;font-family:'Fira Code',monospace;}
+#detail .d-desc{font-size:15px;line-height:1.9;margin-bottom:22px;padding:14px 0;border-top:1px solid var(--border);}
+#detail .d-code-label{font-size:12px;font-weight:600;color:var(--text-dim);margin-bottom:8px;text-transform:uppercase;letter-spacing:1px;}
+#detail .d-code{
+  background:#0c1018;border:1px solid var(--border);border-radius:10px;padding:14px;
+  font-family:'Fira Code','Consolas',monospace;font-size:12px;line-height:1.7;
+  overflow-x:auto;white-space:pre;color:#c9d1d9;
+}
+.ck{color:#c678dd;}.cs{color:#98c379;}.ca{color:#e5c07b;}.cc{color:#5c6370;font-style:italic;}.ct{color:#e06c75;}.cf{color:#61afef;}.cn{color:#d19a66;}
+
+/* Legend */
+#legend{
+  position:fixed;bottom:18px;left:18px;z-index:100;
+  display:flex;flex-wrap:wrap;gap:10px;padding:10px 14px;
+  background:rgba(20,24,36,0.88);backdrop-filter:blur(12px);
+  border:1px solid var(--border);border-radius:10px;
+}
+.leg-item{display:flex;align-items:center;gap:5px;font-size:11.5px;color:var(--text-dim);font-weight:500;}
+.leg-dot{width:10px;height:10px;border-radius:3px;}
+
+/* Zoom */
+#zoom-ctrl{position:fixed;bottom:18px;right:18px;z-index:100;display:flex;flex-direction:column;gap:4px;}
+.z-btn{
+  width:38px;height:38px;border:1px solid var(--border);border-radius:9px;
+  background:rgba(20,24,36,0.88);backdrop-filter:blur(12px);
+  color:var(--text-dim);font-size:17px;cursor:pointer;transition:all .15s;
+  display:flex;align-items:center;justify-content:center;
+}
+.z-btn:hover{border-color:var(--accent);color:var(--text);}
+
+/* Watermark */
+#watermark{
+  position:fixed;top:20px;left:20px;z-index:100;
+  font-family:'Caveat',cursive;font-size:26px;font-weight:700;
+  color:rgba(245,158,11,0.2);pointer-events:none;
+}
+
+/* Hint */
+#hint{
+  position:fixed;bottom:18px;left:50%;transform:translateX(-50%);z-index:100;
+  font-size:12px;color:var(--text-dim);opacity:.5;pointer-events:none;
+  font-family:'Caveat',cursive;
+}
+
+@media(max-width:700px){
+  #detail{width:100%;right:-100%;}
+  #toolbar{top:10px;padding:4px;}
+  .flow-btn{padding:8px 12px;font-size:11px;}
+  .node{width:170px;padding:12px 10px 10px;}
+  .node-title{font-size:18px;}
+}
+</style>
+</head>
+<body>
+
+<div id="watermark">Gorilla Architecture</div>
+
+<div id="toolbar">
+  <button class="flow-btn" data-flow="chat" onclick="selectFlow('chat',this)">💬 Chat Flow</button>
+  <button class="flow-btn" data-flow="tts" onclick="selectFlow('tts',this)">🔊 TTS Flow</button>
+  <button class="flow-btn" data-flow="auth" onclick="selectFlow('auth',this)">🔐 Auth Flow</button>
+  <button class="flow-btn active" data-flow="all" onclick="selectFlow('all',this)">👁 All</button>
+</div>
+
+<div id="canvas-wrap">
+  <div id="canvas">
+    <svg id="lines"></svg>
+    <div id="nodes"></div>
+  </div>
+</div>
+
+<div id="detail">
+  <button id="detail-close" onclick="closeDetail()">✕</button>
+  <div id="detail-content"></div>
+</div>
+
+<div id="legend">
+  <div class="leg-item"><div class="leg-dot" style="background:var(--c-user)"></div>ผู้ใช้</div>
+  <div class="leg-item"><div class="leg-dot" style="background:var(--c-fe)"></div>Frontend</div>
+  <div class="leg-item"><div class="leg-dot" style="background:var(--c-sec)"></div>Security</div>
+  <div class="leg-item"><div class="leg-dot" style="background:var(--c-ctrl)"></div>Controller</div>
+  <div class="leg-item"><div class="leg-dot" style="background:var(--c-svc)"></div>Service</div>
+  <div class="leg-item"><div class="leg-dot" style="background:var(--c-az)"></div>Azure API</div>
+  <div class="leg-item"><div class="leg-dot" style="background:var(--c-sess)"></div>Session</div>
+</div>
+
+<div id="zoom-ctrl">
+  <button class="z-btn" onclick="zoomIn()">+</button>
+  <button class="z-btn" onclick="zoomOut()">−</button>
+  <button class="z-btn" onclick="resetView()" style="font-size:14px">⌂</button>
+</div>
+
+<div id="hint">ลากเพื่อเลื่อน · กดโหนดเพื่อดูรายละเอียด</div>
+
+<script>
+// ─── GRID LAYOUT ───
+// Columns: 80, 360, 640, 920, 1200, 1480
+// Rows:    100 (top), 370 (center), 630 (bottom)
+const NODES = [
+  { id:'user', x:80, y:370, icon:'👤', title:'User', sub:'ผู้ใช้งาน\nถามเมนู / Login', cls:'node-user',
+    file:'—', desc:'ผู้ใช้เข้าผ่านเว็บ browser\nส่งคำถามเกี่ยวกับเมนูคาเฟ่\nหรือ login เพื่อเข้าใช้งาน', code:'' },
+  { id:'fe', x:360, y:370, icon:'💻', title:'Next.js\nFrontend', sub:'ส่ง HTTP request\nแนบ Session Cookie', cls:'node-fe',
+    file:'frontend/', desc:'หน้าเว็บ Next.js\nส่ง POST request ไป backend\nแนบ JSESSIONID cookie อัตโนมัติ\nเล่น MP3 audio จาก TTS response', code:'' },
+  { id:'sec', x:640, y:370, icon:'🛡️', title:'Spring\nSecurity', sub:'ตรวจ auth\nเช็ค ROLE_ADMIN', cls:'node-sec',
+    file:'SecurityConfiguration.java', desc:'Filter chain ทำงานก่อน Controller\n• /api/auth/login, /me → public\n• /api/** → ต้องมี ROLE_ADMIN\nใช้ BCrypt + InMemoryUserDetails',
+    code:`<span class="ca">@Bean</span> SecurityFilterChain <span class="cf">securityFilterChain</span>(HttpSecurity http) {\n  http\n    .csrf(AbstractHttpConfigurer::<span class="cf">disable</span>)\n    .cors(Customizer.<span class="cf">withDefaults</span>())\n    .authorizeHttpRequests(auth -> auth\n      .requestMatchers(<span class="cs">"/api/auth/login"</span>, <span class="cs">"/api/auth/me"</span>, <span class="cs">"/error"</span>)\n        .<span class="cf">permitAll</span>()\n      .requestMatchers(<span class="cs">"/api/**"</span>).<span class="cf">hasRole</span>(<span class="cs">"ADMIN"</span>)\n      .anyRequest().<span class="cf">authenticated</span>());\n}` },
+  // ─── Controllers (column 4) ───
+  { id:'ctrl-auth', x:920, y:100, icon:'🎮', title:'Auth\nController', sub:'/api/auth/*\nlogin, me, logout', cls:'node-ctrl',
+    file:'AuthController.java', desc:'รับ LoginRequest {username, password}\nส่งให้ AuthenticationManager ตรวจ\nถ้าผ่าน → สร้าง HttpSession\nคืน AuthSessionResponse',
+    code:`<span class="ca">@PostMapping</span>(<span class="cs">"/login"</span>)\n<span class="ck">public</span> AuthSessionResponse <span class="cf">login</span>(<span class="ca">@RequestBody</span> LoginRequest req,\n    HttpServletRequest httpRequest, HttpServletResponse httpResponse) {\n  Authentication auth = <span class="ck">this</span>.authenticationManager\n    .<span class="cf">authenticate</span>(UsernamePasswordAuthenticationToken\n      .<span class="cf">unauthenticated</span>(username, password));\n  SecurityContext ctx = SecurityContextHolder.<span class="cf">createEmptyContext</span>();\n  ctx.<span class="cf">setAuthentication</span>(auth);\n  <span class="ck">this</span>.securityContextRepository\n    .<span class="cf">saveContext</span>(ctx, httpRequest, httpResponse);\n  HttpSession session = httpRequest.<span class="cf">getSession</span>(<span class="ck">true</span>);\n}` },
+  { id:'ctrl-chat', x:920, y:370, icon:'🎮', title:'AiChat\nController', sub:'/api/ai/*\nchat, history', cls:'node-ctrl',
+    file:'AiChatController.java', desc:'รับ ChatRequest {prompt, systemPrompt, temperature}\nส่งต่อให้ AzureFoundryChatService\nคืน ChatResponse {answer, history}',
+    code:`<span class="ca">@PostMapping</span>(<span class="cs">"/chat"</span>)\n<span class="ck">public</span> ChatResponse <span class="cf">chat</span>(\n    <span class="ca">@RequestBody</span> ChatRequest request,\n    HttpSession session) {\n  <span class="ck">return this</span>.azureFoundryChatService\n    .<span class="cf">generateAnswer</span>(request, session);\n}` },
+  { id:'ctrl-speech', x:920, y:630, icon:'🎮', title:'Speech\nController', sub:'/api/speech/*\ntext-to-speech', cls:'node-ctrl',
+    file:'SpeechController.java', desc:'รับ TtsRequest {text}\nส่งต่อให้ AzureSpeechTtsService\nคืน MP3 bytes (audio/mpeg)',
+    code:`<span class="ca">@PostMapping</span>(value = <span class="cs">"/tts"</span>, produces = <span class="cs">"audio/mpeg"</span>)\n<span class="ck">public</span> ResponseEntity&lt;<span class="ck">byte</span>[]&gt; <span class="cf">synthesize</span>(\n    <span class="ca">@RequestBody</span> TtsRequest request) {\n  <span class="ck">byte</span>[] audio = <span class="ck">this</span>.azureSpeechTtsService\n    .<span class="cf">synthesize</span>(request.text());\n  <span class="ck">return</span> ResponseEntity.<span class="cf">ok</span>()\n    .contentType(AUDIO_MPEG)\n    .body(audio);\n}` },
+  // ─── Services + Session (column 5) ───
+  { id:'session', x:1200, y:100, icon:'🗂️', title:'Http\nSession', sub:'CHAT_HISTORY\nSecurityContext\n30 min timeout', cls:'node-sess',
+    file:'HttpSession (Servlet)', desc:'เก็บ state ทั้งหมดของ user:\n• SecurityContext (auth info)\n• CHAT_HISTORY: List<ChatMessage>\n• timeout 30 นาที\n⚠️ ไม่มี DB — restart หาย',
+    code:`<span class="cc">// อ่าน history</span>\nList&lt;ChatMessage&gt; history = (List) session\n  .<span class="cf">getAttribute</span>(<span class="cs">"CHAT_HISTORY"</span>);\n\n<span class="cc">// บันทึก history</span>\nsession.<span class="cf">setAttribute</span>(<span class="cs">"CHAT_HISTORY"</span>,\n  <span class="ck">new</span> ArrayList&lt;&gt;(updatedHistory));\n\n<span class="cc">// Cookie: JSESSIONID</span>\n<span class="cc">// HttpOnly, SameSite=Lax</span>` },
+  { id:'svc-chat', x:1200, y:370, icon:'⚙️', title:'Azure Foundry\nChat Service', sub:'อ่าน history\nเรียก AI Agent\nบันทึก history', cls:'node-svc',
+    file:'AzureFoundryChatService.java', desc:'Service หลักสำหรับ chat:\n1. อ่าน history จาก HttpSession\n2. ขอ token จาก Entra ID\n3. เรียก Azure AI Foundry Agent API\n4. บันทึก history กลับ session',
+    code:`List&lt;ChatMessage&gt; history = <span class="cf">getMutableHistory</span>(session);\nChatMessage userMsg = ChatMessage.<span class="cf">user</span>(prompt, Instant.now());\n\nAgentResponseEnvelope resp = RestClient.<span class="cf">builder</span>()\n  .<span class="cf">baseUrl</span>(projectEndpoint)\n  .<span class="cf">defaultHeader</span>(AUTHORIZATION,\n    <span class="cs">"Bearer "</span> + <span class="cf">acquireAccessToken</span>())\n  .build().post()\n  .<span class="cf">uri</span>(<span class="cs">"/openai/v1/responses"</span>)\n  .body(responseRequest)\n  .retrieve().body(AgentResponseEnvelope.class);\n\nsession.<span class="cf">setAttribute</span>(<span class="cs">"CHAT_HISTORY"</span>,\n  <span class="ck">new</span> ArrayList&lt;&gt;(updatedHistory));` },
+  { id:'svc-tts', x:1200, y:630, icon:'⚙️', title:'Azure Speech\nTTS Service', sub:'สร้าง SSML\nเรียก Speech API', cls:'node-svc',
+    file:'AzureSpeechTtsService.java', desc:'แปลง text → SSML (Speech Synthesis ML)\nเรียก Azure Speech REST API\nคืน MP3 bytes กลับ',
+    code:`String ssml = <span class="cf">buildSsml</span>(text, voiceName, locale);\n<span class="ck">byte</span>[] audio = RestClient.builder().build().post()\n  .<span class="cf">uri</span>(synthesisUrl)\n  .<span class="cf">header</span>(<span class="cs">"Ocp-Apim-Subscription-Key"</span>, key)\n  .<span class="cf">header</span>(<span class="cs">"X-Microsoft-OutputFormat"</span>, format)\n  .body(ssml)\n  .retrieve().body(<span class="ck">byte</span>[].class);` },
+  // ─── Azure (column 6) ───
+  { id:'token', x:1480, y:100, icon:'🔑', title:'Azure\nEntra ID', sub:'DefaultAzureCredential\nBearer Token', cls:'node-az',
+    file:'Azure Identity', desc:'ขอ Access Token จาก Azure Entra ID\nใช้ DefaultAzureCredential (auto-detect)\nscope: https://ai.azure.com/.default\n→ ได้ Bearer Token สำหรับ AI API',
+    code:`<span class="ck">this</span>.tokenCredential = <span class="ck">new</span> DefaultAzureCredentialBuilder()\n  .<span class="cf">build</span>();\n\nAccessToken token = <span class="ck">this</span>.tokenCredential\n  .<span class="cf">getTokenSync</span>(\n    <span class="ck">new</span> TokenRequestContext()\n      .addScopes(<span class="cs">"https://ai.azure.com/.default"</span>));` },
+  { id:'az-ai', x:1480, y:370, icon:'🤖', title:'Azure AI\nFoundry', sub:'Agent API\nตอบคำถามเมนู', cls:'node-az',
+    file:'Azure (external)', desc:'Azure AI Foundry Agent\nที่เทรนไว้ตอบคำถามเกี่ยวกับเมนูคาเฟ่\nรับ prompt + history\nคืน answer + metadata',
+    code:`POST {endpoint}/openai/v1/responses\nAuthorization: Bearer {token}\n\nBody:\n{\n  "agent_reference": { "name": "gorilla" },\n  "input": [{"role":"user","content":"..."}],\n  "temperature": 0.7\n}` },
+  { id:'az-speech', x:1480, y:630, icon:'🔊', title:'Azure Speech\nTTS', sub:'แปลงข้อความ\nเป็นเสียง MP3', cls:'node-az',
+    file:'Azure (external)', desc:'Azure Cognitive Speech Service\nแปลงข้อความภาษาไทยเป็นเสียง\nรับ SSML → คืน MP3 bytes',
+    code:`POST {region}.tts.speech.microsoft.com\nOcp-Apim-Subscription-Key: {key}\nContent-Type: application/ssml+xml\n\nBody: <speak>...</speak>` },
+];
+
+// ─── EDGES ───
+const EDGES = [
+  { from:'user', to:'fe', label:'พิมพ์คำถาม' },
+  { from:'fe', to:'sec', label:'HTTP + Cookie' },
+  { from:'sec', to:'ctrl-auth', label:'/api/auth/*', flows:['auth'] },
+  { from:'sec', to:'ctrl-chat', label:'/api/ai/*', flows:['chat'] },
+  { from:'sec', to:'ctrl-speech', label:'/api/speech/*', flows:['tts'] },
+  { from:'ctrl-auth', to:'session', label:'authenticate()', flows:['auth'] },
+  { from:'ctrl-chat', to:'svc-chat', label:'generateAnswer()', flows:['chat'] },
+  { from:'ctrl-speech', to:'svc-tts', label:'synthesize()', flows:['tts'] },
+  { from:'svc-chat', to:'az-ai', label:'POST /responses', flows:['chat'] },
+  { from:'svc-chat', to:'token', label:'acquireToken()', flows:['chat'] },
+  { from:'svc-chat', to:'session', label:'read/write history', flows:['chat'], type:'vertical' },
+  { from:'svc-tts', to:'az-speech', label:'POST SSML', flows:['tts'] },
+  { from:'session', to:'ctrl-auth', label:'Set-Cookie', flows:['auth'], type:'back' },
+];
+
+// Flow node ordering for sequential animation
+const FLOW_ORDER = {
+  chat: ['user','fe','sec','ctrl-chat','svc-chat','token','session','az-ai'],
+  tts:  ['user','fe','sec','ctrl-speech','svc-tts','az-speech'],
+  auth: ['user','fe','sec','ctrl-auth','session'],
+};
+
+// ─── STATE ───
+let currentFlow = 'all';
+let scale = 1, panX = 0, panY = 0;
+let dragging = false, dragStartX, dragStartY, panStartX, panStartY;
+const nodeMap = {};
+NODES.forEach(n => nodeMap[n.id] = n);
+const NW = 210, NH = 140;
+
+// ─── EDGE PATH CALCULATION ───
+function calcPath(from, to, type) {
+  const fCx = from.x + NW/2, fCy = from.y + NH/2;
+  const tCx = to.x + NW/2, tCy = to.y + NH/2;
+
+  if (type === 'back') {
+    // Exit bottom of source, curve below, enter bottom of target
+    const sx = from.x + NW/2, sy = from.y + NH;
+    const ex = to.x + NW/2, ey = to.y + NH;
+    const curveY = Math.max(sy, ey) + 55;
+    return `M${sx},${sy} C${sx},${curveY} ${ex},${curveY} ${ex},${ey}`;
+  }
+
+  if (type === 'vertical') {
+    // Exit top of source, enter bottom of target (going up)
+    const sx = from.x + NW/2, sy = from.y;
+    const ex = to.x + NW/2, ey = to.y + NH;
+    return `M${sx},${sy} C${sx},${(sy+ey)/2} ${ex},${(sy+ey)/2} ${ex},${ey}`;
+  }
+
+  // Standard: exit right of source, enter left of target
+  const sx = from.x + NW, sy = fCy;
+  const ex = to.x, ey = tCy;
+  const midX = (sx + ex) / 2;
+  return `M${sx},${sy} C${midX},${sy} ${midX},${ey} ${ex},${ey}`;
+}
+
+function calcLabelPos(from, to, type) {
+  if (type === 'back') {
+    const mx = (from.x + NW/2 + to.x + NW/2) / 2;
+    const my = Math.max(from.y + NH, to.y + NH) + 48;
+    return { x: mx, y: my };
+  }
+  if (type === 'vertical') {
+    return { x: from.x + NW/2 + 14, y: (from.y + to.y + NH) / 2 };
+  }
+  const sx = from.x + NW, sy = from.y + NH/2;
+  const ex = to.x, ey = to.y + NH/2;
+  return { x: (sx + ex) / 2, y: (sy + ey) / 2 - 10 };
+}
+
+// ─── BUILD DOM ───
+function build() {
+  const nodesEl = document.getElementById('nodes');
+  const svgEl = document.getElementById('lines');
+
+  // Nodes
+  NODES.forEach(n => {
+    const div = document.createElement('div');
+    div.className = `node ${n.cls}`;
+    div.id = 'nd-' + n.id;
+    div.style.left = n.x + 'px';
+    div.style.top = n.y + 'px';
+    div.innerHTML = `<div class="node-icon">${n.icon}</div><div class="node-title">${n.title.replace(/\n/g,'<br>')}</div><div class="node-sub">${n.sub.replace(/\n/g,'<br>')}</div>`;
+    div.onclick = (e) => { e.stopPropagation(); openDetail(n); };
+    nodesEl.appendChild(div);
+  });
+
+  // SVG defs — arrow markers
+  svgEl.innerHTML = '';
+  const defs = document.createElementNS('http://www.w3.org/2000/svg','defs');
+
+  [['arrowhead','#3a4560'],['arrowhead-active','#f59e0b']].forEach(([id, fill]) => {
+    const m = document.createElementNS('http://www.w3.org/2000/svg','marker');
+    m.setAttribute('id',id);
+    m.setAttribute('markerWidth','10'); m.setAttribute('markerHeight','8');
+    m.setAttribute('refX','9'); m.setAttribute('refY','4');
+    m.setAttribute('orient','auto');
+    const p = document.createElementNS('http://www.w3.org/2000/svg','polygon');
+    p.setAttribute('points','0 0, 10 4, 0 8');
+    p.setAttribute('fill',fill);
+    m.appendChild(p);
+    defs.appendChild(m);
+  });
+  svgEl.appendChild(defs);
+
+  // Edges
+  EDGES.forEach((e, i) => {
+    const fromN = nodeMap[e.from], toN = nodeMap[e.to];
+    const type = e.type || 'normal';
+
+    const path = document.createElementNS('http://www.w3.org/2000/svg','path');
+    path.setAttribute('d', calcPath(fromN, toN, type));
+    path.setAttribute('marker-end', `url(#arrowhead)`);
+    path.id = 'edge-' + i;
+    path.dataset.flows = (e.flows || []).join(',');
+    svgEl.appendChild(path);
+
+    // Label
+    const lp = calcLabelPos(fromN, toN, type);
+    const txt = document.createElementNS('http://www.w3.org/2000/svg','text');
+    txt.setAttribute('x', lp.x);
+    txt.setAttribute('y', lp.y);
+    txt.setAttribute('text-anchor', type === 'back' ? 'middle' : 'middle');
+    txt.textContent = e.label;
+    txt.id = 'elbl-' + i;
+    svgEl.appendChild(txt);
+  });
+}
+
+// ─── FLOW SELECTION ───
+function selectFlow(flow, btn) {
+  currentFlow = flow;
+  document.querySelectorAll('.flow-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  applyFlowVisuals();
+  closeDetail();
+}
+
+function applyFlowVisuals() {
+  const activeNodes = new Set();
+  const activeEdges = new Set();
+  const order = FLOW_ORDER[currentFlow] || [];
+
+  if (currentFlow !== 'all') {
+    EDGES.forEach((e, i) => {
+      if ((e.flows || []).includes(currentFlow)) {
+        activeEdges.add(i);
+        activeNodes.add(e.from);
+        activeNodes.add(e.to);
+      }
+    });
+  }
+
+  // Animate nodes sequentially
+  NODES.forEach(n => {
+    const el = document.getElementById('nd-' + n.id);
+    el.style.transitionDelay = '0s';
+    if (currentFlow === 'all') {
+      el.classList.remove('dimmed','active-node');
+    } else if (activeNodes.has(n.id)) {
+      el.classList.remove('dimmed');
+      el.classList.add('active-node');
+      // Sequential delay based on flow order
+      const idx = order.indexOf(n.id);
+      if (idx >= 0) el.style.transitionDelay = (idx * 0.08) + 's';
+    } else {
+      el.classList.remove('active-node');
+      el.classList.add('dimmed');
+    }
+  });
+
+  // Edges
+  EDGES.forEach((e, i) => {
+    const pathEl = document.getElementById('edge-' + i);
+    const lblEl = document.getElementById('elbl-' + i);
+    const flows = e.flows || [];
+    if (currentFlow === 'all') {
+      pathEl.classList.remove('active','dimmed');
+      pathEl.setAttribute('marker-end','url(#arrowhead)');
+      lblEl.classList.remove('active','dimmed');
+    } else if (flows.includes(currentFlow)) {
+      pathEl.classList.remove('dimmed');
+      pathEl.classList.add('active');
+      pathEl.setAttribute('marker-end','url(#arrowhead-active)');
+      lblEl.classList.remove('dimmed');
+      lblEl.classList.add('active');
+    } else {
+      pathEl.classList.remove('active');
+      pathEl.classList.add('dimmed');
+      pathEl.setAttribute('marker-end','url(#arrowhead)');
+      lblEl.classList.remove('active');
+      lblEl.classList.add('dimmed');
+    }
+  });
+}
+
+// ─── DETAIL PANEL ───
+function openDetail(n) {
+  const el = document.getElementById('detail');
+  const c = document.getElementById('detail-content');
+  c.innerHTML = `
+    <div style="font-size:34px;margin-bottom:4px;">${n.icon}</div>
+    <h2>${n.title.replace(/\n/g,' ')}</h2>
+    <div class="d-file">${n.file}</div>
+    <div class="d-desc">${n.desc.replace(/\n/g,'<br>')}</div>
+    ${n.code ? `<div class="d-code-label">Source Code</div><div class="d-code">${n.code}</div>` : ''}
+  `;
+  el.classList.add('open');
+}
+function closeDetail() {
+  document.getElementById('detail').classList.remove('open');
+}
+
+// ─── PAN & ZOOM ───
+function updateTransform() {
+  document.getElementById('canvas').style.transform = `translate(${panX}px,${panY}px) scale(${scale})`;
+}
+function zoomIn() { scale = Math.min(2, scale * 1.15); updateTransform(); }
+function zoomOut() { scale = Math.max(0.3, scale / 1.15); updateTransform(); }
+function resetView() { scale = 0.82; panX = 40; panY = 60; updateTransform(); }
+
+const wrap = document.getElementById('canvas-wrap');
+wrap.addEventListener('mousedown', e => {
+  if (e.target.closest('.node')) return;
+  dragging = true;
+  dragStartX = e.clientX; dragStartY = e.clientY;
+  panStartX = panX; panStartY = panY;
+  wrap.classList.add('grabbing');
+});
+window.addEventListener('mousemove', e => {
+  if (!dragging) return;
+  panX = panStartX + (e.clientX - dragStartX);
+  panY = panStartY + (e.clientY - dragStartY);
+  updateTransform();
+});
+window.addEventListener('mouseup', () => { dragging = false; wrap.classList.remove('grabbing'); });
+wrap.addEventListener('wheel', e => {
+  e.preventDefault();
+  const d = e.deltaY > 0 ? 0.92 : 1.08;
+  scale = Math.max(0.3, Math.min(2, scale * d));
+  updateTransform();
+}, { passive: false });
+
+wrap.addEventListener('click', e => {
+  if (!e.target.closest('.node') && !e.target.closest('#detail')) closeDetail();
+});
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDetail(); });
+
+// ─── INIT ───
+build();
+resetView();
+
+// Fade out hint after 4s
+setTimeout(() => {
+  const h = document.getElementById('hint');
+  if (h) { h.style.transition = 'opacity 1s'; h.style.opacity = '0'; setTimeout(() => h.remove(), 1000); }
+}, 4000);
+</script>
+</body>
+</html>

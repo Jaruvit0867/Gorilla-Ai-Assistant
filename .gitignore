@@ -10,6 +10,10 @@ backend/.env
 frontend/.next/
 frontend/node_modules/
 frontend/.env.local
+landing/.next/
+landing/node_modules/
+landing/out/
+landing/.env.local
 .mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/
 !**/src/test/**/target/
