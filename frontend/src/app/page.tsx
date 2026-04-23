@@ -15,6 +15,16 @@ import {
 import bannerImage from "../../assets/pictures/banner.jpg";
 import logoImage from "../../assets/pictures/logo.png";
 import type { AvatarMode } from "../components/gorilla-avatar-stage";
+import {
+  DEFAULT_LANGUAGE,
+  LANGUAGE_META,
+  LANGUAGE_OPTIONS,
+  LANGUAGE_STORAGE_KEY,
+  TRANSLATIONS,
+  isLanguage,
+  resolveBrowserLanguage,
+  type Language,
+} from "../lib/i18n";
 import styles from "./page.module.css";
 
 const GorillaAvatarStage = dynamic(() => import("../components/gorilla-avatar-stage"), {
@@ -96,6 +106,8 @@ const SPEECH_IDLE_AUTO_STOP_MS = 5_000;
 const SPEECH_HOLD_START_DELAY_MS = 180;
 
 export default function Home() {
+  const [language, setLanguage] = useState<Language>(DEFAULT_LANGUAGE);
+  const [languageReady, setLanguageReady] = useState(false);
   const [auth, setAuth] = useState<AuthSessionResponse | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [prompt, setPrompt] = useState("");
@@ -121,6 +133,10 @@ export default function Home() {
   const assistantAudioRef = useRef<HTMLAudioElement | null>(null);
   const assistantAudioUrlRef = useRef<string | null>(null);
   const assistantSpeechAbortRef = useRef<AbortController | null>(null);
+
+  const languageMeta = LANGUAGE_META[language];
+  const t = TRANSLATIONS[language];
+  const translationRef = useRef(t);
 
   const canSend = useMemo(
     () =>
@@ -149,11 +165,11 @@ export default function Home() {
 
   const speechButtonLabel = useMemo(() => {
     if (!speechSupported) {
-      return "ไม่รองรับการพูด";
+      return t.speech.unsupported;
     }
 
-    return speechActive ? "ปล่อยเพื่อหยุด" : "กดค้างเพื่อพูด";
-  }, [speechActive, speechSupported]);
+    return speechActive ? t.speech.releaseToStop : t.speech.holdToTalk;
+  }, [speechActive, speechSupported, t]);
 
   const isAuthenticated = Boolean(auth?.authenticated);
 
@@ -242,11 +258,55 @@ export default function Home() {
         setLatestMeta(null);
       }
     } catch (requestError) {
-      setError(getErrorMessage(requestError, "โหลดสถานะ session ไม่สำเร็จ"));
+      setError(getErrorMessage(requestError, translationRef.current.errors.sessionLoadFailed));
     } finally {
       setAuthPending(false);
     }
   });
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    let savedLanguage: string | null = null;
+    try {
+      savedLanguage = window.localStorage.getItem(LANGUAGE_STORAGE_KEY);
+    } catch {
+      savedLanguage = null;
+    }
+
+    const browserLanguages =
+      window.navigator.languages?.length > 0
+        ? window.navigator.languages
+        : [window.navigator.language];
+    const nextLanguage = isLanguage(savedLanguage)
+      ? savedLanguage
+      : resolveBrowserLanguage(browserLanguages.filter(Boolean));
+
+    setLanguage(nextLanguage);
+    setLanguageReady(true);
+  }, []);
+
+  useEffect(() => {
+    translationRef.current = t;
+  }, [t]);
+
+  useEffect(() => {
+    if (typeof document !== "undefined") {
+      document.documentElement.lang = languageMeta.htmlLang;
+    }
+
+    if (!languageReady || typeof window === "undefined") {
+      return;
+    }
+
+    try {
+      window.localStorage.setItem(LANGUAGE_STORAGE_KEY, language);
+    } catch {
+      // Ignore storage failures in private or restricted browser contexts.
+    }
+  }, [language, languageMeta.htmlLang, languageReady]);
 
   useEffect(() => {
     void refreshSession();
@@ -255,6 +315,12 @@ export default function Home() {
   useEffect(() => {
     promptRef.current = prompt;
   }, [prompt]);
+
+  useEffect(() => {
+    if (recognitionRef.current) {
+      recognitionRef.current.lang = languageMeta.speechLocale;
+    }
+  }, [languageMeta.speechLocale]);
 
   /* eslint-disable react-hooks/exhaustive-deps */
   useEffect(() => {
@@ -268,7 +334,7 @@ export default function Home() {
     recognition.continuous = true;
     recognition.interimResults = true;
     recognition.maxAlternatives = 1;
-    recognition.lang = "th-TH";
+    recognition.lang = languageMeta.speechLocale;
 
     recognition.onstart = () => {
       speechHeardInputRef.current = false;
@@ -295,11 +361,11 @@ export default function Home() {
       }
 
       if (event.error === "not-allowed" || event.error === "service-not-allowed") {
-        setError("เบราว์เซอร์ยังไม่ได้อนุญาตให้ใช้ไมโครโฟน");
+        setError(translationRef.current.errors.microphonePermission);
         return;
       }
 
-      setError("เริ่มรับเสียงไม่สำเร็จ ลองใหม่อีกครั้ง");
+      setError(translationRef.current.errors.speechStartFailed);
     };
 
     recognition.onend = () => {
@@ -483,7 +549,7 @@ export default function Home() {
       });
       setMessages(history?.messages ?? []);
     } catch (requestError) {
-      setError(getErrorMessage(requestError, "ล็อกอินไม่สำเร็จ"));
+      setError(getErrorMessage(requestError, t.errors.loginFailed));
     } finally {
       setAuthPending(false);
     }
@@ -502,7 +568,7 @@ export default function Home() {
       setLatestMeta(null);
       setPrompt("");
     } catch (requestError) {
-      setError(getErrorMessage(requestError, "ออกจากระบบไม่สำเร็จ"));
+      setError(getErrorMessage(requestError, t.errors.logoutFailed));
     } finally {
       setAuthPending(false);
     }
@@ -522,7 +588,7 @@ export default function Home() {
       setLatestMeta(null);
       setPrompt("");
     } catch (requestError) {
-      setError(getErrorMessage(requestError, "ล้างประวัติแชตไม่สำเร็จ"));
+      setError(getErrorMessage(requestError, t.errors.clearHistoryFailed));
     } finally {
       setChatPending(false);
     }
@@ -559,7 +625,7 @@ export default function Home() {
       promptRef.current = "";
       speechBasePromptRef.current = "";
     } catch (requestError) {
-      setError(getErrorMessage(requestError, "ส่งข้อความไม่สำเร็จ"));
+      setError(getErrorMessage(requestError, t.errors.sendFailed));
     } finally {
       setChatPending(false);
     }
@@ -581,6 +647,20 @@ export default function Home() {
     setError(null);
   }
 
+  function handleLanguageChange(nextLanguage: Language) {
+    if (nextLanguage === language) {
+      return;
+    }
+
+    if (speechActive) {
+      stopSpeechCapture();
+    }
+
+    speechKeyHoldRef.current = false;
+    setError(null);
+    setLanguage(nextLanguage);
+  }
+
   function startSpeechCapture() {
     if (!speechSupported || !auth?.authenticated || chatPending || speechActive) {
       return;
@@ -588,7 +668,7 @@ export default function Home() {
 
     const recognition = recognitionRef.current;
     if (!recognition) {
-      setError("ตัวรับเสียงยังไม่พร้อมใช้งาน");
+      setError(t.errors.speechUnavailable);
       return;
     }
 
@@ -600,7 +680,7 @@ export default function Home() {
     try {
       recognition.start();
     } catch {
-      setError("ระบบรับเสียงกำลังทำงาน ลองใหม่อีกครั้ง");
+      setError(t.errors.speechAlreadyRunning);
     }
   }
 
@@ -695,7 +775,7 @@ export default function Home() {
           <div className={styles.brand}>
             <div className={styles.brandLockup}>
               <div className={styles.brandLogo}>
-                <Image alt="Gorilla logo" priority sizes="88px" src={logoImage} />
+                <Image alt={t.brand.logoAlt} priority sizes="88px" src={logoImage} />
               </div>
               <div className={styles.brandText}>
                 <h1>Gorilla</h1>
@@ -706,30 +786,48 @@ export default function Home() {
             </div>
           </div>
 
-          {auth?.authenticated ? (
-            <div className={styles.topbarActions}>
-              {latestMeta?.model ? (
-                <span className={styles.infoChip}>โมเดล {latestMeta.model}</span>
-              ) : null}
-              <span className={styles.infoChipMuted}>{messages.length} ข้อความ</span>
-              <button
-                className={styles.secondaryButton}
-                disabled={chatPending}
-                onClick={handleReset}
-                type="button"
-              >
-                ล้างแชต
-              </button>
-              <button
-                className={styles.ghostButton}
-                disabled={authPending}
-                onClick={handleLogout}
-                type="button"
-              >
-                ออกจากระบบ
-              </button>
+          <div className={styles.topbarActions}>
+            <div className={styles.languageToggle} role="group" aria-label={t.language.toggleLabel}>
+              {LANGUAGE_OPTIONS.map((option) => (
+                <button
+                  aria-pressed={language === option.value}
+                  className={`${styles.languageOption} ${
+                    language === option.value ? styles.languageOptionActive : ""
+                  }`}
+                  key={option.value}
+                  onClick={() => handleLanguageChange(option.value)}
+                  type="button"
+                >
+                  {option.label}
+                </button>
+              ))}
             </div>
-          ) : null}
+
+            {auth?.authenticated ? (
+              <>
+                {latestMeta?.model ? (
+                  <span className={styles.infoChip}>{t.status.model(latestMeta.model)}</span>
+                ) : null}
+                <span className={styles.infoChipMuted}>{t.status.messageCount(messages.length)}</span>
+                <button
+                  className={styles.secondaryButton}
+                  disabled={chatPending}
+                  onClick={handleReset}
+                  type="button"
+                >
+                  {t.topbar.clearChat}
+                </button>
+                <button
+                  className={styles.ghostButton}
+                  disabled={authPending}
+                  onClick={handleLogout}
+                  type="button"
+                >
+                  {t.topbar.logout}
+                </button>
+              </>
+            ) : null}
+          </div>
         </header>
 
         <section className={`${styles.mainContent} ${isAuthenticated ? styles.mainContentChat : ""}`}>
@@ -740,15 +838,15 @@ export default function Home() {
               <section className={`${styles.card} ${styles.chatPanel}`}>
                 <div className={styles.panelHeader}>
                   <div className={styles.panelText}>
-                    <p className={styles.panelEyebrow}>Chat</p>
-                    <h2>แชตกับ Gorilla</h2>
+                    <p className={styles.panelEyebrow}>{t.chat.eyebrow}</p>
+                    <h2>{t.chat.title}</h2>
                   </div>
                 </div>
 
                 <section className={styles.chatArea}>
                   <div className={styles.chatTimeline}>
                     {messages.length === 0 ? (
-                      <div className={styles.emptyState}>พิมพ์ข้อความหรือกดเพื่อเริ่มพูด</div>
+                      <div className={styles.emptyState}>{t.chat.emptyState}</div>
                     ) : (
                       messages.map((message, index) => (
                         <article
@@ -758,8 +856,8 @@ export default function Home() {
                           key={`${message.createdAt ?? "message"}-${message.role}-${index}`}
                         >
                           <div className={styles.messageMeta}>
-                            <span>{message.role === "user" ? "คุณ" : "Gorilla"}</span>
-                            <time>{formatTimestamp(message.createdAt)}</time>
+                            <span>{message.role === "user" ? t.chat.userRole : t.chat.assistantRole}</span>
+                            <time>{formatTimestamp(message.createdAt, language)}</time>
                           </div>
                           <p>{message.content}</p>
                         </article>
@@ -773,14 +871,14 @@ export default function Home() {
                     className={styles.promptInput}
                     disabled={chatPending}
                     onChange={(event) => setPrompt(event.target.value)}
-                    placeholder="พิมพ์ข้อความหรือกดเพื่อเริ่มพูด..."
+                    placeholder={t.chat.promptPlaceholder}
                     rows={4}
                     value={prompt}
                   />
 
                   <div className={styles.composerFooter}>
                     <button
-                      aria-label={speechActive ? "Release to stop speech to text" : "Hold to start speech to text"}
+                      aria-label={speechActive ? t.speech.stopAria : t.speech.startAria}
                       className={`${styles.speechButton} ${
                         speechActive ? styles.speechButtonActive : ""
                       }`}
@@ -807,10 +905,10 @@ export default function Home() {
                         onClick={handleClearPrompt}
                         type="button"
                       >
-                        ล้างข้อความ
+                        {t.chat.clearPrompt}
                       </button>
                       <button className={styles.primaryButton} disabled={!canSend} type="submit">
-                        {chatPending ? "กำลังส่ง..." : "ส่งข้อความ"}
+                        {chatPending ? t.chat.sending : t.chat.send}
                       </button>
                     </div>
                   </div>
@@ -820,8 +918,8 @@ export default function Home() {
               <aside className={`${styles.card} ${styles.avatarPanel}`}>
                 <div className={styles.panelHeader}>
                   <div className={styles.panelText}>
-                    <p className={styles.panelEyebrow}>Avatar</p>
-                    <h2>Gorilla</h2>
+                    <p className={styles.panelEyebrow}>{t.avatar.eyebrow}</p>
+                    <h2>{t.avatar.title}</h2>
                   </div>
                 </div>
 
@@ -846,13 +944,13 @@ export default function Home() {
             <section className={styles.loginLayout}>
               <div className={`${styles.card} ${styles.loginCard}`}>
                 <div className={styles.loginHeader}>
-                  <p className={styles.panelEyebrow}>Admin Login</p>
-                  <h2 className={styles.loginTitle}>เข้าสู่ระบบ</h2>
+                  <p className={styles.panelEyebrow}>{t.login.eyebrow}</p>
+                  <h2 className={styles.loginTitle}>{t.login.title}</h2>
                 </div>
 
                 <form className={styles.loginForm} onSubmit={handleLogin}>
                   <label className={styles.field}>
-                    <span>ชื่อผู้ใช้</span>
+                    <span>{t.login.username}</span>
                     <input
                       autoComplete="username"
                       onChange={(event) => setUsername(event.target.value)}
@@ -861,25 +959,25 @@ export default function Home() {
                     />
                   </label>
                   <label className={styles.field}>
-                    <span>รหัสผ่าน</span>
+                    <span>{t.login.password}</span>
                     <input
                       autoComplete="current-password"
                       onChange={(event) => setPassword(event.target.value)}
-                      placeholder="กรอกรหัสผ่าน"
+                      placeholder={t.login.passwordPlaceholder}
                       type="password"
                       value={password}
                     />
                   </label>
                   <button className={styles.primaryButton} disabled={authPending} type="submit">
-                    {authPending ? "กำลังเข้าสู่ระบบ..." : "เข้าสู่ระบบ"}
+                    {authPending ? t.login.submitting : t.login.submit}
                   </button>
                 </form>
               </div>
 
               <aside className={`${styles.card} ${styles.loginPreview}`}>
                 <div className={styles.panelText}>
-                  <p className={styles.panelEyebrow}>Preview</p>
-                  <h2>Gorilla Avatar</h2>
+                  <p className={styles.panelEyebrow}>{t.login.previewEyebrow}</p>
+                  <h2>{t.login.previewTitle}</h2>
                 </div>
                 <div className={styles.loginStageWrap}>
                   <Image
@@ -943,17 +1041,19 @@ function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
 }
 
-function formatTimestamp(value: string | null) {
+function formatTimestamp(value: string | null, language: Language) {
+  const fallback = TRANSLATIONS[language].timestamp.justNow;
+
   if (!value) {
-    return "เมื่อสักครู่";
+    return fallback;
   }
 
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
-    return "เมื่อสักครู่";
+    return fallback;
   }
 
-  return new Intl.DateTimeFormat("th-TH", {
+  return new Intl.DateTimeFormat(LANGUAGE_META[language].dateLocale, {
     hour: "2-digit",
     minute: "2-digit",
     day: "2-digit",

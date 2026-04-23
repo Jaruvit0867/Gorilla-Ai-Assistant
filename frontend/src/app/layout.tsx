@@ -15,7 +15,7 @@ const mono = IBM_Plex_Mono({
 
 export const metadata: Metadata = {
   title: "Gorilla",
-  description: "ผู้ช่วยแชตเมนูร้าน Gorilla",
+  description: "ผู้ช่วยแชตเมนูร้าน Gorilla / Gorilla menu chat assistant",
 };
 
 export default function RootLayout({

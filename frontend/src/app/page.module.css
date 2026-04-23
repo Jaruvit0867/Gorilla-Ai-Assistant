@@ -121,6 +121,50 @@
   gap: 12px;
 }
 
+.languageToggle {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  min-height: 40px;
+  padding: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.68);
+  border: 1px solid rgba(21, 32, 24, 0.1);
+}
+
+.languageOption {
+  min-width: 42px;
+  min-height: 32px;
+  padding: 0 11px;
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+  color: #435245;
+  background: transparent;
+  font-family: var(--font-mono), monospace;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  transition:
+    background-color 140ms ease,
+    box-shadow 140ms ease,
+    color 140ms ease,
+    transform 140ms ease;
+}
+
+.languageOption:hover {
+  background: rgba(28, 124, 84, 0.08);
+  transform: translateY(-1px);
+}
+
+.languageOptionActive,
+.languageOptionActive:hover {
+  color: #fffdf8;
+  background: #183326;
+  box-shadow: 0 10px 18px rgba(21, 32, 24, 0.16);
+}
+
 /* ========================================================================
    Chips & Buttons
    ======================================================================== */
@@ -728,6 +772,18 @@
     flex-shrink: 0;
   }
 
+  .languageToggle {
+    min-height: 34px;
+    padding: 3px;
+  }
+
+  .languageOption {
+    min-width: 36px;
+    min-height: 28px;
+    padding: 0 8px;
+    font-size: 0.66rem;
+  }
+
   .topbarActions .secondaryButton,
   .topbarActions .ghostButton,
   .topbarActions .primaryButton {
@@ -1023,6 +1079,20 @@
 
   .topbarActions {
     gap: 4px;
+    flex-wrap: wrap;
+    max-width: min(218px, calc(100vw - 118px));
+    row-gap: 4px;
+  }
+
+  .languageToggle {
+    min-height: 32px;
+  }
+
+  .languageOption {
+    min-width: 32px;
+    min-height: 26px;
+    padding: 0 7px;
+    font-size: 0.64rem;
   }
 
   .topbarActions .secondaryButton,
