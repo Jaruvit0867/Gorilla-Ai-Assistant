@@ -154,11 +154,11 @@ export default function Home() {
         <div className="heroActions">
           <a className="primaryButton" href={demoUrl} target="_blank" rel="noreferrer">
             <PlayIcon />
-            Start Demo
+            Live Demo
           </a>
           <a className="secondaryButton" href="#story-flow">
             <ArrowDownIcon />
-            See the Flow
+            How it works
           </a>
         </div>
 
@@ -233,7 +233,7 @@ export default function Home() {
       <footer className="bottomBar">
         <a className="footerBrand" href={portfolioUrl} target="_blank" rel="noreferrer">
           <span className="footerLogo">
-            <Image src="/logo.png" alt="" width={22} height={22} />
+            <img src="/logo.png" alt="" width={16} height={16} style={{ objectFit: "contain" }} />
           </span>
           Gorilla
         </a>
