@@ -117,10 +117,12 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [authPending, setAuthPending] = useState(true);
   const [chatPending, setChatPending] = useState(false);
+  const [replyPending, setReplyPending] = useState(false);
   const [speechSupported, setSpeechSupported] = useState(false);
   const [speechActive, setSpeechActive] = useState(false);
   const [avatarSpeaking, setAvatarSpeaking] = useState(false);
 
+  const chatTimelineRef = useRef<HTMLDivElement | null>(null);
   const recognitionRef = useRef<BrowserSpeechRecognition | null>(null);
   const promptRef = useRef("");
   const speechBasePromptRef = useRef("");
@@ -315,6 +317,18 @@ export default function Home() {
   useEffect(() => {
     promptRef.current = prompt;
   }, [prompt]);
+
+  useEffect(() => {
+    const timeline = chatTimelineRef.current;
+    if (!timeline) {
+      return;
+    }
+
+    timeline.scrollTo({
+      top: timeline.scrollHeight,
+      behavior: "smooth",
+    });
+  }, [messages, replyPending]);
 
   useEffect(() => {
     if (recognitionRef.current) {
@@ -601,8 +615,20 @@ export default function Home() {
     }
 
     setChatPending(true);
+    setReplyPending(true);
     setError(null);
     stopAssistantSpeaking();
+
+    const optimisticMessage: ChatMessage = {
+      role: "user",
+      content: normalizedPrompt,
+      createdAt: new Date().toISOString(),
+    };
+
+    setMessages((currentMessages) => [...currentMessages, optimisticMessage]);
+    setPrompt("");
+    promptRef.current = "";
+    speechBasePromptRef.current = "";
 
     try {
       const response = await requestJson<ChatResponse>("/api/ai/chat", {
@@ -620,13 +646,16 @@ export default function Home() {
           startAssistantTextAnimation(response.answer);
         });
       }
-
-      setPrompt("");
-      promptRef.current = "";
-      speechBasePromptRef.current = "";
     } catch (requestError) {
+      setMessages((currentMessages) =>
+        currentMessages.filter((message) => message !== optimisticMessage),
+      );
+      setPrompt(normalizedPrompt);
+      promptRef.current = normalizedPrompt;
+      speechBasePromptRef.current = normalizedPrompt;
       setError(getErrorMessage(requestError, t.errors.sendFailed));
     } finally {
+      setReplyPending(false);
       setChatPending(false);
     }
   }
@@ -844,24 +873,47 @@ export default function Home() {
                 </div>
 
                 <section className={styles.chatArea}>
-                  <div className={styles.chatTimeline}>
-                    {messages.length === 0 ? (
+                  <div className={styles.chatTimeline} ref={chatTimelineRef}>
+                    {messages.length === 0 && !replyPending ? (
                       <div className={styles.emptyState}>{t.chat.emptyState}</div>
                     ) : (
-                      messages.map((message, index) => (
-                        <article
-                          className={
-                            message.role === "user" ? styles.userMessage : styles.gorillaMessage
-                          }
-                          key={`${message.createdAt ?? "message"}-${message.role}-${index}`}
-                        >
-                          <div className={styles.messageMeta}>
-                            <span>{message.role === "user" ? t.chat.userRole : t.chat.assistantRole}</span>
-                            <time>{formatTimestamp(message.createdAt, language)}</time>
-                          </div>
-                          <p>{message.content}</p>
-                        </article>
-                      ))
+                      <>
+                        {messages.map((message, index) => (
+                          <article
+                            className={
+                              message.role === "user" ? styles.userMessage : styles.gorillaMessage
+                            }
+                            key={`${message.createdAt ?? "message"}-${message.role}-${index}`}
+                          >
+                            <div className={styles.messageMeta}>
+                              <span>
+                                {message.role === "user" ? t.chat.userRole : t.chat.assistantRole}
+                              </span>
+                              <time>{formatTimestamp(message.createdAt, language)}</time>
+                            </div>
+                            <p>{message.content}</p>
+                          </article>
+                        ))}
+
+                        {replyPending ? (
+                          <article className={`${styles.gorillaMessage} ${styles.typingMessage}`}>
+                            <div className={styles.messageMeta}>
+                              <span>{t.chat.assistantRole}</span>
+                              <time>{t.timestamp.justNow}</time>
+                            </div>
+                            <div
+                              aria-live="polite"
+                              className={styles.typingBubble}
+                              role="status"
+                            >
+                              <span className={styles.srOnly}>{t.chat.assistantThinking}</span>
+                              <span className={styles.typingDot} />
+                              <span className={`${styles.typingDot} ${styles.typingDotSecond}`} />
+                              <span className={`${styles.typingDot} ${styles.typingDotThird}`} />
+                            </div>
+                          </article>
+                        ) : null}
+                      </>
                     )}
                   </div>
                 </section>

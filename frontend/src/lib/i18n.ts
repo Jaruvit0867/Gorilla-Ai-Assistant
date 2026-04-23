@@ -21,6 +21,7 @@ export type TranslationBundle = {
     emptyState: string;
     userRole: string;
     assistantRole: string;
+    assistantThinking: string;
     promptPlaceholder: string;
     clearPrompt: string;
     send: string;
@@ -115,6 +116,7 @@ export const TRANSLATIONS = {
       emptyState: "พิมพ์ข้อความหรือกดเพื่อเริ่มพูด",
       userRole: "คุณ",
       assistantRole: "Gorilla",
+      assistantThinking: "Gorilla กำลังคิดคำตอบ",
       promptPlaceholder: "พิมพ์ข้อความหรือกดเพื่อเริ่มพูด...",
       clearPrompt: "ล้างข้อความ",
       send: "ส่งข้อความ",
@@ -178,6 +180,7 @@ export const TRANSLATIONS = {
       emptyState: "Type a message or hold the mic to start speaking",
       userRole: "You",
       assistantRole: "Gorilla",
+      assistantThinking: "Gorilla is thinking",
       promptPlaceholder: "Type a message or hold the mic to start speaking...",
       clearPrompt: "Clear",
       send: "Send",
