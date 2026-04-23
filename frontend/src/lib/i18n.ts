@@ -199,7 +199,7 @@ export const TRANSLATIONS = {
       title: "Log in",
       username: "Username",
       password: "Password",
-      passwordPlaceholder: "Enter password",
+      passwordPlaceholder: "Enter password (For live demo use: nottgorilla)",
       submit: "Log in",
       submitting: "Logging in...",
       previewEyebrow: "Preview",
