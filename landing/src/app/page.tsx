@@ -3,7 +3,7 @@ import type { CSSProperties } from "react";
 import ScrollController from "../components/scroll-controller";
 
 const githubUrl = "https://github.com/Jaruvit0867/Gorilla-Ai-Assistant/tree/avatar";
-const demoUrl = "https://gray-river-05290ca0f.7.azurestaticapps.net/";
+const demoUrl = "https://witty-plant-0d96a2700.7.azurestaticapps.net/";
 const portfolioUrl = "https://jaruvit0867.github.io/";
 
 const featurePills = [
