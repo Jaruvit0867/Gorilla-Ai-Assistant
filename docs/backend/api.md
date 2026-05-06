@@ -122,6 +122,40 @@ Response:
 }
 ```
 
+## `POST /api/ai/chat/stream`
+
+Protected endpoint. Requires an authenticated admin session.
+
+This endpoint uses the same request body as `POST /api/ai/chat`, but returns Server-Sent Events so the frontend can render the assistant response while it is still generating.
+
+Response:
+
+```text
+Content-Type: text/event-stream
+```
+
+Events:
+
+```text
+event: meta
+data: {"sessionId":"ABC123...","agentId":"test:2","agentName":"test"}
+
+event: delta
+data: {"text":"ข้อความบางส่วน"}
+
+event: done
+data: {"answer":"คำตอบเต็ม","model":"gpt-4.1","responseId":"resp_...","createdAt":"2026-04-01T00:00:00Z","sessionId":"ABC123...","history":[],"agentId":"test:2","agentName":"test"}
+
+event: error
+data: {"message":"Readable error message"}
+```
+
+Notes:
+
+- `delta` events are appended into the current assistant bubble
+- `done` contains the final response and canonical session history
+- history is persisted only after the stream completes successfully
+
 ## `GET /api/ai/history`
 
 Protected endpoint. Returns chat history for the current session.
@@ -188,4 +222,5 @@ Typical statuses:
 - `401` unauthenticated
 - `403` authenticated but not authorized
 - `502` upstream Azure AI Foundry or Azure Speech failure
+- `504` Azure AI Foundry response timeout
 - `503` missing configuration

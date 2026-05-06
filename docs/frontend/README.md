@@ -12,7 +12,7 @@
 
 - show the admin login page
 - render chat history returned by the backend
-- send prompts to the backend
+- send prompts to the backend with streaming chat responses
 - capture browser speech input in Thai
 - play assistant replies through Azure Speech TTS audio
 - render the Gorilla avatar beside the chat
@@ -37,7 +37,7 @@
 1. page loads
 2. frontend calls `/api/auth/me`
 3. if authenticated, frontend calls `/api/ai/history`
-4. user can type and send messages with `/api/ai/chat`
+4. user can type and send messages with `/api/ai/chat/stream`
 5. user can use browser speech input to fill the prompt field
 6. assistant replies are spoken with `/api/speech/tts`
 7. user can clear history with `DELETE /api/ai/history`
@@ -63,9 +63,16 @@
 
 ### `submitPrompt(...)`
 
-- sends the prompt to `/api/ai/chat`
-- updates the visible history from the backend response
+- sends the prompt to `/api/ai/chat/stream`
+- appends `delta` events into the current assistant bubble
+- updates visible history from the final `done` event
 - triggers audio playback for the assistant reply
+
+### `readSseStream(...)`
+
+- reads backend Server-Sent Events from a `fetch` response body
+- supports `delta`, `done`, and `error` events
+- lets the chat render progressively like Foundry Playground
 
 ### `startSpeechCapture()` and `stopSpeechCapture()`
 

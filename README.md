@@ -64,11 +64,14 @@ http://localhost:3000
 - `ADMIN_PASSWORD`
 - `AZURE_EXISTING_AIPROJECT_ENDPOINT`
 - `AZURE_EXISTING_AGENT_ID`
+- `AZURE_AI_FOUNDRY_RESPONSE_TIMEOUT`
 - `AZURE_LOCATION`
 - `AZURE_SPEECH_ENDPOINT`
 - `AZURE_SPEECH_KEY`
 - `AZURE_SPEECH_VOICE_NAME`
 - `FRONTEND_ORIGIN`
+
+`AZURE_AI_FOUNDRY_RESPONSE_TIMEOUT` defaults to `60s`. Menu/RAG prompts can take longer than simple greetings, so keep this higher than the default HTTP client timeout.
 
 Notes:
 
@@ -91,7 +94,7 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8080
 
 - admin login with Spring Security session auth
 - session-based chat history with `HttpSession`
-- Azure AI Foundry agent chat
+- Azure AI Foundry agent chat with streaming responses
 - browser-native speech input in Thai
 - Azure Speech TTS playback for assistant replies
 - Gorilla avatar panel beside the chat UI
@@ -107,6 +110,7 @@ Authentication:
 Chat:
 
 - `POST /api/ai/chat`
+- `POST /api/ai/chat/stream`
 - `GET /api/ai/history`
 - `DELETE /api/ai/history`
 

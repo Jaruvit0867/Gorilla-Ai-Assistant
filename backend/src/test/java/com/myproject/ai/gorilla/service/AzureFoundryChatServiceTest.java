@@ -2,9 +2,15 @@ package com.myproject.ai.gorilla.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.util.List;
+
 import org.junit.jupiter.api.Test;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 class AzureFoundryChatServiceTest {
+
+	private final ObjectMapper objectMapper = new ObjectMapper();
 
 	@Test
 	void shouldNormalizeQuotedConfigValues() {
@@ -26,6 +32,30 @@ class AzureFoundryChatServiceTest {
 		assertThat(parts.name()).isEqualTo("test");
 		assertThat(parts.version()).isEqualTo("2");
 		assertThat(parts.raw()).isEqualTo("test:2");
+	}
+
+	@Test
+	void shouldParseStreamingDeltaEvent() {
+		AzureFoundryChatService.FoundrySseEvent event = AzureFoundryChatService.parseFoundrySseEvent(List.of(
+				"event: response.output_text.delta",
+				"data: {\"type\":\"response.output_text.delta\",\"delta\":\"hello\"}"));
+
+		assertThat(event.event()).isEqualTo("response.output_text.delta");
+		assertThat(AzureFoundryChatService.extractStreamDelta(event.event(), event.data(), this.objectMapper))
+			.isEqualTo("hello");
+	}
+
+	@Test
+	void shouldIgnoreDoneMalformedAndEmptyStreamingEvents() {
+		assertThat(AzureFoundryChatService.extractStreamDelta(null, "[DONE]", this.objectMapper)).isNull();
+		assertThat(AzureFoundryChatService.extractStreamDelta(
+				"response.output_text.delta",
+				"{not-json}",
+				this.objectMapper)).isNull();
+		assertThat(AzureFoundryChatService.extractStreamDelta(
+				"response.output_text.delta",
+				"{\"type\":\"response.output_text.delta\",\"delta\":\"\"}",
+				this.objectMapper)).isNull();
 	}
 
 }

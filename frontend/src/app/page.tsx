@@ -61,6 +61,19 @@ type ChatResponse = {
   agentName: string;
 };
 
+type ChatStreamEvent = {
+  event: string | null;
+  data: string | null;
+};
+
+type ChatStreamDelta = {
+  text: string;
+};
+
+type ChatStreamError = {
+  message: string;
+};
+
 type SpeechRecognitionAlternativeLike = {
   transcript: string;
 };
@@ -121,6 +134,8 @@ export default function Home() {
   const [speechSupported, setSpeechSupported] = useState(false);
   const [speechActive, setSpeechActive] = useState(false);
   const [avatarSpeaking, setAvatarSpeaking] = useState(false);
+  const [playingMessageKey, setPlayingMessageKey] = useState<string | null>(null);
+  const [loadingSpeechMessageKey, setLoadingSpeechMessageKey] = useState<string | null>(null);
 
   const chatTimelineRef = useRef<HTMLDivElement | null>(null);
   const recognitionRef = useRef<BrowserSpeechRecognition | null>(null);
@@ -135,6 +150,7 @@ export default function Home() {
   const assistantAudioRef = useRef<HTMLAudioElement | null>(null);
   const assistantAudioUrlRef = useRef<string | null>(null);
   const assistantSpeechAbortRef = useRef<AbortController | null>(null);
+  const chatStreamAbortRef = useRef<AbortController | null>(null);
 
   const languageMeta = LANGUAGE_META[language];
   const t = TRANSLATIONS[language];
@@ -154,12 +170,12 @@ export default function Home() {
       return "listening";
     }
 
-    if (chatPending) {
-      return "thinking";
-    }
-
     if (avatarSpeaking) {
       return "speaking";
+    }
+
+    if (chatPending) {
+      return "thinking";
     }
 
     return "idle";
@@ -414,6 +430,8 @@ export default function Home() {
       clearSpeechHoldStartTimeout();
       clearSpeechIdleTimeout();
       stopSpeechCapture();
+      abortChatStream();
+      stopTtsPlayback();
     };
   }, []);
   /* eslint-enable react-hooks/exhaustive-deps */
@@ -437,6 +455,11 @@ export default function Home() {
     speechIdleTimeoutRef.current = window.setTimeout(() => {
       stopSpeechCapture();
     }, SPEECH_IDLE_AUTO_STOP_MS);
+  }
+
+  function abortChatStream() {
+    chatStreamAbortRef.current?.abort();
+    chatStreamAbortRef.current = null;
   }
 
   function stopAssistantSpeaking() {
@@ -467,6 +490,31 @@ export default function Home() {
     setAvatarSpeaking(false);
   }
 
+  function stopTtsPlayback() {
+    stopAssistantSpeaking();
+    setPlayingMessageKey(null);
+    setLoadingSpeechMessageKey(null);
+  }
+
+  async function handleTtsToggle(text: string, messageKey: string) {
+    if (playingMessageKey === messageKey) {
+      stopTtsPlayback();
+      return;
+    }
+
+    stopTtsPlayback();
+    setLoadingSpeechMessageKey(messageKey);
+
+    try {
+      await speakAssistantAnswer(text);
+      setPlayingMessageKey(messageKey);
+      setLoadingSpeechMessageKey(null);
+    } catch {
+      setLoadingSpeechMessageKey(null);
+      startAssistantTextAnimation(text);
+    }
+  }
+
   function startAssistantTextAnimation(text: string) {
     stopAssistantSpeaking();
 
@@ -489,59 +537,54 @@ export default function Home() {
     const abortController = new AbortController();
     assistantSpeechAbortRef.current = abortController;
 
-    try {
-      const audioBlob = await requestAudio("/api/speech/tts", {
-        method: "POST",
-        body: JSON.stringify({ text: normalizedText }),
-        headers: {
-          "Content-Type": "application/json",
-        },
-        signal: abortController.signal,
-      });
+    const audioBlob = await requestAudio("/api/speech/tts", {
+      method: "POST",
+      body: JSON.stringify({ text: normalizedText }),
+      headers: {
+        "Content-Type": "application/json",
+      },
+      signal: abortController.signal,
+    });
 
-      if (abortController.signal.aborted || audioBlob.size === 0) {
-        return;
-      }
-
-      const audioUrl = URL.createObjectURL(audioBlob);
-      const audio = new Audio(audioUrl);
-
-      assistantAudioUrlRef.current = audioUrl;
-      assistantAudioRef.current = audio;
-
-      const cleanup = () => {
-        if (assistantAudioRef.current === audio) {
-          assistantAudioRef.current = null;
-        }
-
-        if (assistantAudioUrlRef.current === audioUrl) {
-          URL.revokeObjectURL(audioUrl);
-          assistantAudioUrlRef.current = null;
-        }
-
-        if (assistantSpeechAbortRef.current === abortController) {
-          assistantSpeechAbortRef.current = null;
-        }
-
-        setAvatarSpeaking(false);
-      };
-
-      audio.preload = "auto";
-      audio.onplay = () => setAvatarSpeaking(true);
-      audio.onended = cleanup;
-      audio.onerror = cleanup;
-      audio.onpause = () => {
-        if (!audio.ended) {
-          cleanup();
-        }
-      };
-
-      await audio.play();
-    } catch (requestError) {
-      if (!abortController.signal.aborted) {
-        throw requestError;
-      }
+    if (abortController.signal.aborted || audioBlob.size === 0) {
+      return;
     }
+
+    const audioUrl = URL.createObjectURL(audioBlob);
+    const audio = new Audio(audioUrl);
+
+    assistantAudioUrlRef.current = audioUrl;
+    assistantAudioRef.current = audio;
+
+    const cleanup = () => {
+      if (assistantAudioRef.current === audio) {
+        assistantAudioRef.current = null;
+      }
+
+      if (assistantAudioUrlRef.current === audioUrl) {
+        URL.revokeObjectURL(audioUrl);
+        assistantAudioUrlRef.current = null;
+      }
+
+      if (assistantSpeechAbortRef.current === abortController) {
+        assistantSpeechAbortRef.current = null;
+      }
+
+      setAvatarSpeaking(false);
+      setPlayingMessageKey(null);
+    };
+
+    audio.preload = "auto";
+    audio.onplay = () => setAvatarSpeaking(true);
+    audio.onended = cleanup;
+    audio.onerror = cleanup;
+    audio.onpause = () => {
+      if (!audio.ended) {
+        cleanup();
+      }
+    };
+
+    await audio.play();
   }
 
   async function handleLogin(event: FormEvent<HTMLFormElement>) {
@@ -574,8 +617,9 @@ export default function Home() {
     setError(null);
 
     try {
+      abortChatStream();
       stopSpeechCapture();
-      stopAssistantSpeaking();
+      stopTtsPlayback();
       await requestJson("/api/auth/logout", { method: "POST" });
       setAuth(unauthenticatedSession());
       setMessages([]);
@@ -593,8 +637,9 @@ export default function Home() {
     setError(null);
 
     try {
+      abortChatStream();
       stopSpeechCapture();
-      stopAssistantSpeaking();
+      stopTtsPlayback();
       const history = await requestJson<ChatHistoryResponse>("/api/ai/history", {
         method: "DELETE",
       });
@@ -614,49 +659,131 @@ export default function Home() {
       return;
     }
 
+    abortChatStream();
     setChatPending(true);
     setReplyPending(true);
     setError(null);
-    stopAssistantSpeaking();
+    stopTtsPlayback();
 
+    const userCreatedAt = new Date().toISOString();
+    const assistantCreatedAt = new Date().toISOString();
     const optimisticMessage: ChatMessage = {
       role: "user",
       content: normalizedPrompt,
-      createdAt: new Date().toISOString(),
+      createdAt: userCreatedAt,
     };
+    const streamingAssistantMessage: ChatMessage = {
+      role: "assistant",
+      content: "",
+      createdAt: assistantCreatedAt,
+    };
+    const abortController = new AbortController();
 
-    setMessages((currentMessages) => [...currentMessages, optimisticMessage]);
+    chatStreamAbortRef.current = abortController;
+    setMessages((currentMessages) => [
+      ...currentMessages,
+      optimisticMessage,
+      streamingAssistantMessage,
+    ]);
     setPrompt("");
     promptRef.current = "";
     speechBasePromptRef.current = "";
 
     try {
-      const response = await requestJson<ChatResponse>("/api/ai/chat", {
+      const response = await fetch(`${apiBaseUrl}/api/ai/chat/stream`, {
         method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify({
           prompt: normalizedPrompt,
         }),
+        signal: abortController.signal,
       });
 
-      if (response) {
-        setMessages(response.history);
-        setLatestMeta(response);
-        void speakAssistantAnswer(response.answer).catch((ttsError) => {
-          console.error("Azure Speech TTS playback failed", ttsError);
-          startAssistantTextAnimation(response.answer);
-        });
+      if (!response.ok) {
+        throw new Error(await readFetchError(response));
       }
+
+      if (!response.body) {
+        throw new Error(t.errors.sendFailed);
+      }
+
+      let receivedDelta = false;
+      const streamResult: {
+        finalResponse: ChatResponse | null;
+        streamError: Error | null;
+      } = {
+        finalResponse: null,
+        streamError: null,
+      };
+
+      await readSseStream(response.body, (event) => {
+        if (event.event === "delta") {
+          const payload = parseSseJson<ChatStreamDelta>(event);
+          const text = payload?.text ?? "";
+          if (!text) {
+            return;
+          }
+
+          if (!receivedDelta) {
+            receivedDelta = true;
+            setReplyPending(false);
+          }
+
+          setMessages((currentMessages) =>
+            appendAssistantDelta(currentMessages, assistantCreatedAt, text),
+          );
+          return;
+        }
+
+        if (event.event === "done") {
+          streamResult.finalResponse = parseSseJson<ChatResponse>(event);
+          return;
+        }
+
+        if (event.event === "error") {
+          const payload = parseSseJson<ChatStreamError>(event);
+          streamResult.streamError = new Error(payload?.message ?? t.errors.sendFailed);
+        }
+      });
+
+      if (streamResult.streamError) {
+        throw streamResult.streamError;
+      }
+
+      if (!streamResult.finalResponse) {
+        throw new Error(t.errors.sendFailed);
+      }
+
+      const finalResponse = streamResult.finalResponse;
+      setMessages(finalResponse.history);
+      setLatestMeta(finalResponse);
     } catch (requestError) {
+      if (abortController.signal.aborted) {
+        return;
+      }
+
       setMessages((currentMessages) =>
-        currentMessages.filter((message) => message !== optimisticMessage),
+        currentMessages.filter(
+          (message) =>
+            !(
+              (message.role === "user" && message.createdAt === userCreatedAt) ||
+              (message.role === "assistant" && message.createdAt === assistantCreatedAt)
+            ),
+        ),
       );
       setPrompt(normalizedPrompt);
       promptRef.current = normalizedPrompt;
       speechBasePromptRef.current = normalizedPrompt;
       setError(getErrorMessage(requestError, t.errors.sendFailed));
     } finally {
-      setReplyPending(false);
-      setChatPending(false);
+      if (chatStreamAbortRef.current === abortController) {
+        chatStreamAbortRef.current = null;
+        setReplyPending(false);
+        setChatPending(false);
+      }
     }
   }
 
@@ -878,24 +1005,117 @@ export default function Home() {
                       <div className={styles.emptyState}>{t.chat.emptyState}</div>
                     ) : (
                       <>
-                        {messages.map((message, index) => (
-                          <article
-                            className={
-                              message.role === "user" ? styles.userMessage : styles.gorillaMessage
-                            }
-                            key={`${message.createdAt ?? "message"}-${message.role}-${index}`}
-                          >
-                            <div className={styles.messageMeta}>
-                              <span>
-                                {message.role === "user" ? t.chat.userRole : t.chat.assistantRole}
-                              </span>
-                              <time>{formatTimestamp(message.createdAt, language)}</time>
-                            </div>
-                            <p>{message.content}</p>
-                          </article>
-                        ))}
+                        {messages.map((message, index) => {
+                          const messageKey = `${message.createdAt ?? "message"}-${message.role}-${index}`;
+                          const isPlaying = playingMessageKey === messageKey;
+                          const isLoading = loadingSpeechMessageKey === messageKey;
+                          const canPlayTts =
+                            message.role === "assistant" &&
+                            message.content.length > 0 &&
+                            !replyPending &&
+                            !chatPending;
 
-                        {replyPending ? (
+                          return (
+                            <article
+                              className={
+                                message.role === "user" ? styles.userMessage : styles.gorillaMessage
+                              }
+                              key={messageKey}
+                            >
+                              <div className={styles.messageMeta}>
+                                <span>
+                                  {message.role === "user" ? t.chat.userRole : t.chat.assistantRole}
+                                </span>
+                                <time>{formatTimestamp(message.createdAt, language)}</time>
+                              </div>
+                              {message.role === "assistant" &&
+                              message.content.length === 0 &&
+                              replyPending ? (
+                                <div
+                                  aria-live="polite"
+                                  className={styles.typingBubble}
+                                  role="status"
+                                >
+                                  <span className={styles.srOnly}>{t.chat.assistantThinking}</span>
+                                  <span className={styles.typingDot} />
+                                  <span className={`${styles.typingDot} ${styles.typingDotSecond}`} />
+                                  <span className={`${styles.typingDot} ${styles.typingDotThird}`} />
+                                </div>
+                              ) : (
+                                <p>{message.content}</p>
+                              )}
+                              {canPlayTts ? (
+                                <div className={styles.messageActions}>
+                                  <button
+                                    aria-label={
+                                      isLoading
+                                        ? t.tts.loadingAria
+                                        : isPlaying
+                                          ? t.tts.stopAria
+                                          : t.tts.listenAria
+                                    }
+                                    className={`${styles.ttsButton} ${
+                                      isPlaying ? styles.ttsButtonPlaying : ""
+                                    } ${isLoading ? styles.ttsButtonLoading : ""}`}
+                                    disabled={isLoading}
+                                    onClick={() => handleTtsToggle(message.content, messageKey)}
+                                    type="button"
+                                  >
+                                    <svg
+                                      aria-hidden="true"
+                                      className={styles.ttsIcon}
+                                      fill="none"
+                                      height="18"
+                                      viewBox="0 0 24 24"
+                                      width="18"
+                                      xmlns="http://www.w3.org/2000/svg"
+                                    >
+                                      {isPlaying ? (
+                                        <rect fill="currentColor" height="14" rx="2" width="4" x="6" y="5" />
+                                      ) : null}
+                                      {isPlaying ? (
+                                        <rect fill="currentColor" height="14" rx="2" width="4" x="14" y="5" />
+                                      ) : null}
+                                      {!isPlaying ? (
+                                        <path
+                                          d="M3 9v6h4l5 5V4L7 9H3z"
+                                          fill="currentColor"
+                                        />
+                                      ) : null}
+                                      {!isPlaying ? (
+                                        <path
+                                          d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"
+                                          fill="currentColor"
+                                        />
+                                      ) : null}
+                                      {!isPlaying ? (
+                                        <path
+                                          d="M19.07 4.93a10 10 0 010 14.14M16.54 7.46a6 6 0 010 9.08"
+                                          stroke="currentColor"
+                                          strokeLinecap="round"
+                                          strokeWidth="1.5"
+                                        />
+                                      ) : null}
+                                    </svg>
+                                    <span>
+                                      {isLoading
+                                        ? t.tts.loading
+                                        : isPlaying
+                                          ? t.tts.stop
+                                          : t.tts.listen}
+                                    </span>
+                                    {isLoading ? <span className={styles.ttsSpinner} /> : null}
+                                  </button>
+                                </div>
+                              ) : null}
+                            </article>
+                          );
+                        })}
+
+                        {replyPending &&
+                        !messages.some(
+                          (message) => message.role === "assistant" && message.content.length === 0,
+                        ) ? (
                           <article className={`${styles.gorillaMessage} ${styles.typingMessage}`}>
                             <div className={styles.messageMeta}>
                               <span>{t.chat.assistantRole}</span>
@@ -1091,6 +1311,144 @@ function mergeSpeechPrompt(basePrompt: string, transcript: string) {
 
 function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
+}
+
+async function readFetchError(response: Response) {
+  const rawError = await response.text().catch(() => "");
+  if (!rawError) {
+    return `Request failed with status ${response.status}`;
+  }
+
+  try {
+    const payload = JSON.parse(rawError) as Record<string, unknown>;
+    return typeof payload.message === "string"
+      ? payload.message
+      : typeof payload.error === "string"
+        ? payload.error
+        : rawError;
+  } catch {
+    return rawError;
+  }
+}
+
+async function readSseStream(
+  body: ReadableStream<Uint8Array>,
+  onEvent: (event: ChatStreamEvent) => void,
+) {
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      buffer += decoder.decode(value, { stream: !done }).replace(/\r\n/g, "\n");
+
+      let boundaryIndex = buffer.indexOf("\n\n");
+      while (boundaryIndex >= 0) {
+        const rawEvent = buffer.slice(0, boundaryIndex);
+        buffer = buffer.slice(boundaryIndex + 2);
+        const event = parseSseEvent(rawEvent);
+        if (event) {
+          onEvent(event);
+        }
+        boundaryIndex = buffer.indexOf("\n\n");
+      }
+
+      if (done) {
+        break;
+      }
+    }
+
+    const finalEvent = parseSseEvent(buffer);
+    if (finalEvent) {
+      onEvent(finalEvent);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+}
+
+function parseSseEvent(rawEvent: string): ChatStreamEvent | null {
+  if (!rawEvent.trim()) {
+    return null;
+  }
+
+  let eventName: string | null = null;
+  const dataLines: string[] = [];
+
+  for (const rawLine of rawEvent.split("\n")) {
+    const line = rawLine.replace(/\r$/, "");
+    if (!line || line.startsWith(":")) {
+      continue;
+    }
+
+    const separatorIndex = line.indexOf(":");
+    const field = separatorIndex >= 0 ? line.slice(0, separatorIndex) : line;
+    let value = separatorIndex >= 0 ? line.slice(separatorIndex + 1) : "";
+    if (value.startsWith(" ")) {
+      value = value.slice(1);
+    }
+
+    if (field === "event") {
+      eventName = value || null;
+    }
+
+    if (field === "data") {
+      dataLines.push(value);
+    }
+  }
+
+  if (!eventName && dataLines.length === 0) {
+    return null;
+  }
+
+  return {
+    event: eventName,
+    data: dataLines.length > 0 ? dataLines.join("\n") : null,
+  };
+}
+
+function parseSseJson<T>(event: ChatStreamEvent): T | null {
+  if (!event.data) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(event.data) as T;
+  } catch {
+    return null;
+  }
+}
+
+function appendAssistantDelta(
+  messages: ChatMessage[],
+  assistantCreatedAt: string,
+  text: string,
+) {
+  let targetIndex = -1;
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message.role === "assistant" && message.createdAt === assistantCreatedAt) {
+      targetIndex = index;
+      break;
+    }
+  }
+
+  if (targetIndex < 0) {
+    return [
+      ...messages,
+      {
+        role: "assistant" as const,
+        content: text,
+        createdAt: assistantCreatedAt,
+      },
+    ];
+  }
+
+  return messages.map((message, index) =>
+    index === targetIndex ? { ...message, content: `${message.content}${text}` } : message,
+  );
 }
 
 function formatTimestamp(value: string | null, language: Language) {

@@ -1,5 +1,7 @@
 package com.myproject.ai.gorilla.config;
 
+import java.time.Duration;
+
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 @ConfigurationProperties(prefix = "azure.ai.foundry")
@@ -14,6 +16,10 @@ public class AzureFoundryProperties {
 	private Double temperature;
 
 	private Integer maxCompletionTokens;
+
+	private Duration connectTimeout = Duration.ofSeconds(10);
+
+	private Duration responseTimeout = Duration.ofSeconds(60);
 
 	public String getProjectEndpoint() {
 		return this.projectEndpoint;
@@ -53,6 +59,22 @@ public class AzureFoundryProperties {
 
 	public void setMaxCompletionTokens(Integer maxCompletionTokens) {
 		this.maxCompletionTokens = maxCompletionTokens;
+	}
+
+	public Duration getConnectTimeout() {
+		return this.connectTimeout;
+	}
+
+	public void setConnectTimeout(Duration connectTimeout) {
+		this.connectTimeout = connectTimeout;
+	}
+
+	public Duration getResponseTimeout() {
+		return this.responseTimeout;
+	}
+
+	public void setResponseTimeout(Duration responseTimeout) {
+		this.responseTimeout = responseTimeout;
 	}
 
 }

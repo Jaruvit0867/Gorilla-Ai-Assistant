@@ -41,7 +41,7 @@
 
 ### Chat flow
 
-1. Client calls `POST /api/ai/chat`
+1. Client calls `POST /api/ai/chat` or `POST /api/ai/chat/stream`
 2. `AiChatController.chat(...)` forwards the request and current session
 3. `AzureFoundryChatService.generateAnswer(...)` reads chat history from `HttpSession`
 4. Service appends the latest user message
@@ -49,6 +49,8 @@
 6. Service extracts the model answer
 7. Service stores user and assistant messages back into `HttpSession`
 8. Updated history is returned to the client
+
+For streaming chat, `streamAnswer(...)` sends `stream: true` to Foundry and forwards `delta` events to the client with `SseEmitter`. History is stored only when the stream finishes successfully.
 
 ### TTS flow
 
@@ -95,6 +97,7 @@ Purpose:
 Important methods:
 
 - `chat(...)`
+- `chatStream(...)`
 - `history(...)`
 - `clearHistory(...)`
 
@@ -117,6 +120,7 @@ Purpose:
 Important methods:
 
 - `generateAnswer(...)`
+- `streamAnswer(...)`
 - `getHistory(...)`
 - `clearHistory(...)`
 - `parseAgentReference(...)`
@@ -152,11 +156,14 @@ Important methods:
 - `ADMIN_PASSWORD`
 - `AZURE_EXISTING_AIPROJECT_ENDPOINT`
 - `AZURE_EXISTING_AGENT_ID`
+- `AZURE_AI_FOUNDRY_RESPONSE_TIMEOUT`
 - `AZURE_LOCATION`
 - `AZURE_SPEECH_ENDPOINT`
 - `AZURE_SPEECH_KEY`
 - `AZURE_SPEECH_VOICE_NAME`
 - `FRONTEND_ORIGIN`
+
+`AZURE_AI_FOUNDRY_RESPONSE_TIMEOUT` defaults to `60s` and is used for slower Foundry agent responses such as menu recommendations that trigger RAG/knowledge retrieval.
 
 ## Testing
 

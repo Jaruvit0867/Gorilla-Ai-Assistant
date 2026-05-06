@@ -34,6 +34,14 @@ export type TranslationBundle = {
     startAria: string;
     stopAria: string;
   };
+  tts: {
+    listen: string;
+    loading: string;
+    stop: string;
+    listenAria: string;
+    loadingAria: string;
+    stopAria: string;
+  };
   avatar: {
     eyebrow: string;
     title: string;
@@ -129,6 +137,14 @@ export const TRANSLATIONS = {
       startAria: "กดค้างเพื่อเริ่มแปลงเสียงเป็นข้อความ",
       stopAria: "ปล่อยเพื่อหยุดแปลงเสียงเป็นข้อความ",
     },
+    tts: {
+      listen: "ฟังคำตอบ",
+      loading: "กำลังโหลดเสียง",
+      stop: "หยุดเสียง",
+      listenAria: "ฟังคำตอบเป็นเสียง",
+      loadingAria: "กำลังโหลดเสียง",
+      stopAria: "หยุดเสียง",
+    },
     avatar: {
       eyebrow: "อวาตาร์",
       title: "Gorilla",
@@ -192,6 +208,14 @@ export const TRANSLATIONS = {
       releaseToStop: "Release to stop",
       startAria: "Hold to start speech to text",
       stopAria: "Release to stop speech to text",
+    },
+    tts: {
+      listen: "Listen",
+      loading: "Loading audio",
+      stop: "Stop audio",
+      listenAria: "Listen to the answer as audio",
+      loadingAria: "Loading audio",
+      stopAria: "Stop audio playback",
     },
     avatar: {
       eyebrow: "Avatar",
